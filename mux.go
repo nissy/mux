@@ -41,6 +41,7 @@ func isParamPattern(pattern string) (ok bool) {
 
 func (mx *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 	if isParamPattern(pattern) {
+		return
 	}
 
 	mx.statics[route{
