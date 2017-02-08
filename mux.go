@@ -16,11 +16,10 @@ const (
 	characterWildCard = "*"
 )
 
-var NotFound = http.NotFound
-
 type (
 	Mux struct {
-		node *node
+		node     *node
+		NotFound http.HandlerFunc
 	}
 
 	node struct {
@@ -47,6 +46,7 @@ func NewMux() *Mux {
 		node: &node{
 			static: make(map[route]http.HandlerFunc),
 		},
+		NotFound: http.NotFound,
 	}
 }
 
@@ -95,7 +95,7 @@ func (m *Mux) handler(r *http.Request) http.HandlerFunc {
 		return fn
 	}
 
-	return NotFound
+	return m.NotFound
 }
 
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
