@@ -2,7 +2,6 @@ package mux
 
 import (
 	"net/http"
-	"net/url"
 	"strings"
 )
 
@@ -11,13 +10,17 @@ const (
 	POST   = "POST"
 	PUT    = "PUT"
 	DELETE = "DELETE"
+	HEAD   = "HEAD"
+
+	ParamCharacter    = ":"
+	WildcardCharacter = "*"
 )
 
 var NotFound = http.NotFound
 
 type Mux struct {
-	statics map[route]http.HandlerFunc
-	params  map[route]http.HandlerFunc
+	static map[route]http.HandlerFunc
+	//dynamic map[route]http.HandlerFunc
 }
 
 type route struct {
@@ -27,50 +30,46 @@ type route struct {
 
 func NewMux() *Mux {
 	return &Mux{
-		statics: make(map[route]http.HandlerFunc),
+		static: make(map[route]http.HandlerFunc),
 	}
 }
 
-func isParamPattern(pattern string) (ok bool) {
-	if ok = strings.Contains(pattern, ":"); !ok {
-		return strings.Contains(pattern, "*")
+func isDynamicPattern(pattern string) bool {
+	for _, v := range []string{ParamCharacter, WildcardCharacter} {
+		if strings.Contains(pattern, v) {
+			return true
+		}
 	}
 
-	return ok
+	return false
 }
 
 func (mx *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
-	if isParamPattern(pattern) {
+	if isDynamicPattern(pattern) {
 		return
 	}
 
-	mx.statics[route{
+	mx.static[route{
 		method:  method,
 		pattern: pattern,
 	}] = handlerFunc
 }
 
-func (m *Mux) match(r *http.Request) http.HandlerFunc {
-	u, err := url.Parse(r.RequestURI)
-
-	if err != nil {
-		panic(err)
-	}
-
-	//static
-	rt := route{
+func (m *Mux) handler(r *http.Request) http.HandlerFunc {
+	// static route
+	if fn, ok := m.static[route{
 		method:  r.Method,
-		pattern: u.Path,
+		pattern: r.URL.Path,
+	}]; ok {
+		return fn
 	}
 
-	if _, ok := m.statics[rt]; ok {
-		return m.statics[rt]
-	}
+	// dynamic route
 
 	return NotFound
 }
 
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	m.match(r)(w, r)
+	m.handler(r)(w, r)
 	return
 }
