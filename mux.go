@@ -12,30 +12,46 @@ const (
 	DELETE = "DELETE"
 	HEAD   = "HEAD"
 
-	ParamCharacter    = ":"
-	WildcardCharacter = "*"
+	characterParam    = ":"
+	characterWildCard = "*"
 )
 
 var NotFound = http.NotFound
 
-type Mux struct {
-	static map[route]http.HandlerFunc
-	//dynamic map[route]http.HandlerFunc
-}
+type (
+	Mux struct {
+		node *node
+	}
 
-type route struct {
-	method  string
-	pattern string
-}
+	node struct {
+		static nodeStatic
+		param  nodeParam
+	}
+
+	nodeStatic map[route]http.HandlerFunc
+
+	nodeParam struct {
+		route       route
+		params      []string
+		handlerFunc http.HandlerFunc
+	}
+
+	route struct {
+		method  string
+		pattern string
+	}
+)
 
 func NewMux() *Mux {
 	return &Mux{
-		static: make(map[route]http.HandlerFunc),
+		node: &node{
+			static: make(map[route]http.HandlerFunc),
+		},
 	}
 }
 
-func isDynamicPattern(pattern string) bool {
-	for _, v := range []string{ParamCharacter, WildcardCharacter} {
+func isParamPattern(pattern string) bool {
+	for _, v := range []string{characterParam, characterWildCard} {
 		if strings.Contains(pattern, v) {
 			return true
 		}
@@ -45,26 +61,39 @@ func isDynamicPattern(pattern string) bool {
 }
 
 func (mx *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
-	if isDynamicPattern(pattern) {
+	if isParamPattern(pattern) {
 		return
 	}
 
-	mx.static[route{
+	mx.node.static[route{
 		method:  method,
 		pattern: pattern,
 	}] = handlerFunc
 }
 
-func (m *Mux) handler(r *http.Request) http.HandlerFunc {
-	// static route
-	if fn, ok := m.static[route{
+func (n nodeStatic) routing(r *http.Request) http.HandlerFunc {
+	if fn, ok := n[route{
 		method:  r.Method,
 		pattern: r.URL.Path,
 	}]; ok {
 		return fn
 	}
 
-	// dynamic route
+	return nil
+}
+
+func (n nodeParam) routing(r *http.Request) http.HandlerFunc {
+	return nil
+}
+
+func (m *Mux) handler(r *http.Request) http.HandlerFunc {
+	if fn := m.node.static.routing(r); fn != nil {
+		return fn
+	}
+
+	if fn := m.node.param.routing(r); fn != nil {
+		return fn
+	}
 
 	return NotFound
 }
