@@ -86,8 +86,8 @@ func newRouteParam(method, pattern string) routeParam {
 }
 
 func isParamPattern(pattern string) bool {
-	for _, v := range []string{characterColon, characterWildCard} {
-		if strings.Contains(pattern, v) {
+	for i := 0; i < len(pattern); i++ {
+		if pattern[i] == byteColon || pattern[i] == byteWildCard {
 			return true
 		}
 	}
@@ -162,7 +162,7 @@ func (n nodeParam) routing(r *http.Request) http.HandlerFunc {
 			}
 
 			if vv[0] == byteColon {
-				Params[vv[1:]] = string(rDirs[i])
+				Params[vv[1:]] = rDirs[i]
 
 				if i == nDirIndex {
 					return v.handlerFunc
@@ -171,7 +171,7 @@ func (n nodeParam) routing(r *http.Request) http.HandlerFunc {
 				continue
 			}
 
-			if rDirs[i] == vv {
+			if vv == rDirs[i] {
 				if i == nDirIndex {
 					return v.handlerFunc
 				}
