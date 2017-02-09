@@ -78,10 +78,10 @@ func newRouteStatic(method, pattern string) routeStatic {
 	}
 }
 
-func newRouteParam(method string, dirIndex int) routeParam {
+func newRouteParam(method, pattern string) routeParam {
 	return routeParam{
 		method:   method,
-		dirIndex: dirIndex,
+		dirIndex: dirIndex(pattern),
 	}
 }
 
@@ -101,7 +101,7 @@ func (mx *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 	}
 
 	if isParamPattern(pattern) {
-		rtp := newRouteParam(method, dirIndex(pattern))
+		rtp := newRouteParam(method, pattern)
 		mx.node.param.route[rtp] = append(mx.node.param.route[rtp], routeParamPattern{
 			pattern:     pattern,
 			handlerFunc: handlerFunc,
@@ -132,7 +132,7 @@ func dirIndex(dir string) (n int) {
 }
 
 func dirSplit(dir string) (ds []string) {
-	for _, v := range strings.Split(dir, "/") {
+	for _, v := range strings.Split(dir, characterSlash) {
 		if len(v) > 0 {
 			ds = append(ds, v)
 		}
@@ -144,7 +144,7 @@ func dirSplit(dir string) (ds []string) {
 func (n nodeParam) routing(r *http.Request) http.HandlerFunc {
 	rDirs := dirSplit(r.URL.Path)
 
-	for _, v := range n.route[newRouteParam(r.Method, dirIndex(r.URL.Path))] {
+	for _, v := range n.route[newRouteParam(r.Method, r.URL.Path)] {
 		nDirs := dirSplit(v.pattern)
 		nDirIndex := len(nDirs) - 1
 
@@ -195,6 +195,5 @@ func (m *Mux) handler(r *http.Request) http.HandlerFunc {
 }
 
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	m.handler(r)(w, r)
-	return
+	m.handler(r).ServeHTTP(w, r)
 }
