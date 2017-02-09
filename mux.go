@@ -71,6 +71,20 @@ func NewMux() *Mux {
 	}
 }
 
+func newRouteStatic(method, pattern string) routeStatic {
+	return routeStatic{
+		method:  method,
+		pattern: pattern,
+	}
+}
+
+func newRouteParam(method string, dirIndex int) routeParam {
+	return routeParam{
+		method:   method,
+		dirIndex: dirIndex,
+	}
+}
+
 func isParamPattern(pattern string) bool {
 	for _, v := range []string{characterColon, characterWildCard} {
 		if strings.Contains(pattern, v) {
@@ -79,13 +93,6 @@ func isParamPattern(pattern string) bool {
 	}
 
 	return false
-}
-
-func newRouteParam(method string, dirIndex int) routeParam {
-	return routeParam{
-		method:   method,
-		dirIndex: dirIndex,
-	}
 }
 
 func (mx *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
@@ -103,17 +110,11 @@ func (mx *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 		return
 	}
 
-	mx.node.static[routeStatic{
-		method:  method,
-		pattern: pattern,
-	}] = handlerFunc
+	mx.node.static[newRouteStatic(method, pattern)] = handlerFunc
 }
 
 func (n nodeStatic) routing(r *http.Request) http.HandlerFunc {
-	if fn, ok := n[routeStatic{
-		method:  r.Method,
-		pattern: r.URL.Path,
-	}]; ok {
+	if fn, ok := n[newRouteStatic(r.Method, r.URL.Path)]; ok {
 		return fn
 	}
 
