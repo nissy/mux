@@ -6,17 +6,23 @@ import (
 )
 
 const (
-	GET    = "GET"
-	POST   = "POST"
-	PUT    = "PUT"
-	DELETE = "DELETE"
-	HEAD   = "HEAD"
+	GET     = "GET"
+	POST    = "POST"
+	PUT     = "PUT"
+	DELETE  = "DELETE"
+	HEAD    = "HEAD"
+	OPTIONS = "OPTIONS"
 )
 
+var Params = make(map[string]string)
+
 var (
-	Params            = make(map[string]string)
-	characterParam    = ":"
+	characterColon    = ":"
 	characterWildCard = "*"
+	characterSlash    = "/"
+	byteColon         = []byte(characterColon)[0]
+	byteWildCard      = []byte(characterWildCard)[0]
+	byteSlash         = []byte(characterSlash)[0]
 )
 
 type (
@@ -39,7 +45,6 @@ type (
 
 	nodeParam struct {
 		route       map[routeParam][]routeParamPattern
-		params      []string
 		handlerFunc http.HandlerFunc
 	}
 
@@ -67,7 +72,7 @@ func NewMux() *Mux {
 }
 
 func isParamPattern(pattern string) bool {
-	for _, v := range []string{characterParam, characterWildCard} {
+	for _, v := range []string{characterColon, characterWildCard} {
 		if strings.Contains(pattern, v) {
 			return true
 		}
@@ -84,6 +89,10 @@ func newRouteParam(method string, dirIndex int) routeParam {
 }
 
 func (mx *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
+	if pattern[0] != byteSlash {
+		panic("There is no leading slash")
+	}
+
 	if isParamPattern(pattern) {
 		rtp := newRouteParam(method, dirIndex(pattern))
 		mx.node.param.route[rtp] = append(mx.node.param.route[rtp], routeParamPattern{
@@ -111,48 +120,54 @@ func (n nodeStatic) routing(r *http.Request) http.HandlerFunc {
 	return nil
 }
 
-func dirIndex(dir string) int {
-	return len(dirSplit(dir)) - 1
-}
-
-func dirSplit(dir string) (s []string) {
-	for _, v := range strings.Split(dir, "/") {
-		if len(v) > 0 {
-			s = append(s, v)
+func dirIndex(dir string) (n int) {
+	for i := 0; i < len(dir); i++ {
+		if dir[i] == byteSlash {
+			n++
 		}
 	}
 
-	return s
+	return n - 1
+}
+
+func dirSplit(dir string) (ds []string) {
+	for _, v := range strings.Split(dir, "/") {
+		if len(v) > 0 {
+			ds = append(ds, v)
+		}
+	}
+
+	return ds
 }
 
 func (n nodeParam) routing(r *http.Request) http.HandlerFunc {
-	rDir := dirSplit(r.URL.Path)
+	rDirs := dirSplit(r.URL.Path)
 
 	for _, v := range n.route[newRouteParam(r.Method, dirIndex(r.URL.Path))] {
-		sDir := dirSplit(v.pattern)
-		sDirIndex := len(dirSplit(v.pattern)) - 1
+		nDirs := dirSplit(v.pattern)
+		nDirIndex := len(nDirs) - 1
 
-		for i, vv := range sDir {
-			if strings.Contains(vv, characterWildCard) {
-				if i == sDirIndex {
+		for i, vv := range nDirs {
+			if vv[0] == byteWildCard {
+				if i == nDirIndex {
 					return v.handlerFunc
 				}
 
 				continue
 			}
 
-			if string(vv[0]) == characterParam {
-				Params[vv[1:]] = string(rDir[i])
+			if vv[0] == byteColon {
+				Params[vv[1:]] = string(rDirs[i])
 
-				if i == sDirIndex {
+				if i == nDirIndex {
 					return v.handlerFunc
 				}
 
 				continue
 			}
 
-			if rDir[i] == vv {
-				if i == sDirIndex {
+			if rDirs[i] == vv {
+				if i == nDirIndex {
 					return v.handlerFunc
 				}
 
@@ -161,7 +176,6 @@ func (n nodeParam) routing(r *http.Request) http.HandlerFunc {
 
 			break
 		}
-
 	}
 
 	return nil
