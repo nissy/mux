@@ -128,7 +128,11 @@ func dirIndex(dir string) (n int) {
 		}
 	}
 
-	return n - 1
+	if n > 0 {
+		return n - 1
+	}
+
+	return 0
 }
 
 func dirSplit(dir string) (ds []string) {
