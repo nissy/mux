@@ -32,6 +32,11 @@ type (
 
 	nodeStatic map[routeStatic]http.HandlerFunc
 
+	routeStatic struct {
+		method  string
+		pattern string
+	}
+
 	nodeParam struct {
 		route       map[routeParam][]routeParamPattern
 		params      []string
@@ -46,11 +51,6 @@ type (
 	routeParamPattern struct {
 		pattern     string
 		handlerFunc http.HandlerFunc
-	}
-
-	routeStatic struct {
-		method  string
-		pattern string
 	}
 )
 
