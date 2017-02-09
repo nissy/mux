@@ -2,11 +2,57 @@ package mux
 
 import (
 	"bytes"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
+
+func setup() *httptest.Server {
+	mux := NewMux()
+	mux.Entry(GET, "/foo", foo)
+	mux.Entry(GET, "/bar", bar)
+	mux.Entry(GET, "/baz", baz)
+	return httptest.NewServer(mux)
+}
+
+func teardown(ts *httptest.Server) {
+	ts.Close()
+}
+
+func TestMux(t *testing.T) {
+	ts := setup()
+	defer teardown(ts)
+
+	cases := []struct {
+		Path   string
+		Status int
+		Body   string
+	}{
+		{"/foo", 200, "foo"},
+		{"/bar", 200, "bar"},
+		{"/baz", 200, "baz"},
+		{"/hoge", 404, "404 page not found\n"},
+	}
+
+	for _, tc := range cases {
+		res, err := http.Get(ts.URL + tc.Path)
+
+		if err != nil {
+			t.Fatalf("something went to wrong: %s", err)
+		}
+
+		if got, want := res.StatusCode, tc.Status; got != want {
+			t.Fatalf("StatusCode=%d, want=%d", got, want)
+		}
+
+		buf := new(bytes.Buffer)
+		buf.ReadFrom(res.Body)
+
+		if got, want := buf.String(), tc.Body; got != want {
+			t.Fatalf("Body=%q, want=%q", got, want)
+		}
+	}
+}
 
 func foo(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("foo"))
@@ -18,110 +64,4 @@ func bar(w http.ResponseWriter, r *http.Request) {
 
 func baz(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("baz"))
-}
-
-func TestHandler(t *testing.T) {
-	mux := NewMux()
-	mux.Entry(GET, "/foo", foo)
-	mux.Entry(GET, "/bar", bar)
-	mux.Entry(GET, "/baz", baz)
-
-	ts := httptest.NewServer(mux)
-	defer ts.Close()
-
-	// foo
-	res, err := http.Get(ts.URL + "/foo")
-	if err != nil {
-		t.Error("unexpected")
-		return
-	}
-
-	if res.StatusCode != 200 {
-		t.Error("Status code error")
-		return
-	}
-
-	body, err := ioutil.ReadAll(res.Body)
-
-	if err != nil {
-		t.Error(err)
-		return
-	}
-
-	if bytes.Compare(body, []byte("foo")) < 0 {
-		t.Error("Unexpected Body")
-		return
-	}
-
-	// bar
-	res, err = http.Get(ts.URL + "/bar")
-	if err != nil {
-		t.Error("unexpected")
-		return
-	}
-
-	if res.StatusCode != 200 {
-		t.Error("Status code error")
-		return
-	}
-
-	body, err = ioutil.ReadAll(res.Body)
-
-	if err != nil {
-		t.Error(err)
-		return
-	}
-
-	if bytes.Compare(body, []byte("bar")) < 0 {
-		t.Error("Unexpected Body")
-		return
-	}
-
-	// baz
-	res, err = http.Get(ts.URL + "/baz")
-	if err != nil {
-		t.Error("unexpected")
-		return
-	}
-
-	if res.StatusCode != 200 {
-		t.Error("Status code error")
-		return
-	}
-
-	body, err = ioutil.ReadAll(res.Body)
-
-	if err != nil {
-		t.Error(err)
-		return
-	}
-
-	if bytes.Compare(body, []byte("baz")) < 0 {
-		t.Error("Unexpected Body")
-		return
-	}
-
-	// not found
-	res, err = http.Get(ts.URL + "/hoge")
-	if err != nil {
-		t.Error("unexpected")
-		return
-	}
-
-	if res.StatusCode != 404 {
-		t.Error("Status code error")
-		return
-	}
-
-	body, err = ioutil.ReadAll(res.Body)
-
-	if err != nil {
-		t.Error(err)
-		return
-	}
-
-	if bytes.Compare(body, []byte("404 page not found")) < 0 {
-		t.Errorf("Unexpected Body: %s", body)
-		return
-	}
 }
