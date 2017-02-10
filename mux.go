@@ -17,12 +17,12 @@ const (
 )
 
 var (
-	characterColon    = ":"
-	characterWildCard = "*"
-	characterSlash    = "/"
-	byteColon         = []byte(characterColon)[0]
-	byteWildCard      = []byte(characterWildCard)[0]
-	byteSlash         = []byte(characterSlash)[0]
+	characterColon    = ':'
+	characterWildCard = '*'
+	characterSlash    = '/'
+	byteColon         = byte(characterColon)
+	byteWildCard      = byte(characterWildCard)
+	byteSlash         = byte(characterSlash)
 )
 
 type (
@@ -149,14 +149,10 @@ func dirIndex(dir string) (n int) {
 	return 0
 }
 
-func dirSplit(dir string) (ds []string) {
-	for _, v := range strings.Split(dir, characterSlash) {
-		if len(v) > 0 {
-			ds = append(ds, v)
-		}
-	}
-
-	return ds
+func dirSplit(dir string) []string {
+	return strings.FieldsFunc(dir, func(r rune) bool {
+		return r == characterSlash
+	})
 }
 
 func (n nodeStatic) lookup(r *http.Request) http.HandlerFunc {
