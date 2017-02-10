@@ -1,20 +1,20 @@
 package mux
 
 import (
+	"context"
 	"net/http"
 	"strings"
 )
 
 const (
-	GET     = "GET"
-	POST    = "POST"
-	PUT     = "PUT"
-	DELETE  = "DELETE"
-	HEAD    = "HEAD"
-	OPTIONS = "OPTIONS"
+	GET        = "GET"
+	POST       = "POST"
+	PUT        = "PUT"
+	DELETE     = "DELETE"
+	HEAD       = "HEAD"
+	OPTIONS    = "OPTIONS"
+	ctxKeyName = "mux"
 )
-
-var Params = make(map[string]string)
 
 var (
 	characterColon    = ":"
@@ -57,6 +57,10 @@ type (
 		pattern     string
 		handlerFunc http.HandlerFunc
 	}
+
+	Context struct {
+		URLParams map[string]string
+	}
 )
 
 func NewMux() *Mux {
@@ -85,6 +89,12 @@ func newRouteParam(method, pattern string) routeParam {
 	}
 }
 
+func newContext() *Context {
+	return &Context{
+		URLParams: make(map[string]string),
+	}
+}
+
 func isParamPattern(pattern string) bool {
 	for i := 0; i < len(pattern); i++ {
 		if pattern[i] == byteColon || pattern[i] == byteWildCard {
@@ -93,6 +103,14 @@ func isParamPattern(pattern string) bool {
 	}
 
 	return false
+}
+
+func URLParam(r *http.Request, key string) string {
+	if ctx := r.Context().Value(ctxKeyName).(*Context); ctx != nil {
+		return ctx.URLParams[key]
+	}
+
+	return ""
 }
 
 func (mx *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
@@ -147,6 +165,7 @@ func dirSplit(dir string) (ds []string) {
 
 func (n nodeParam) routing(r *http.Request) http.HandlerFunc {
 	rDirs := dirSplit(r.URL.Path)
+	ctx := r.Context().Value(ctxKeyName).(*Context)
 
 	for _, v := range n.route[newRouteParam(r.Method, r.URL.Path)] {
 		nDirs := dirSplit(v.pattern)
@@ -162,7 +181,7 @@ func (n nodeParam) routing(r *http.Request) http.HandlerFunc {
 			}
 
 			if vv[0] == byteColon {
-				Params[vv[1:]] = rDirs[i]
+				ctx.URLParams[vv[1:]] = rDirs[i]
 
 				if i == nDirIndex {
 					return v.handlerFunc
@@ -186,18 +205,18 @@ func (n nodeParam) routing(r *http.Request) http.HandlerFunc {
 	return nil
 }
 
-func (m *Mux) handler(r *http.Request) http.HandlerFunc {
+func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	r = r.WithContext(context.WithValue(r.Context(), ctxKeyName, newContext()))
+
 	if fn := m.node.static.routing(r); fn != nil {
-		return fn
+		fn.ServeHTTP(w, r)
+		return
 	}
 
 	if fn := m.node.param.routing(r); fn != nil {
-		return fn
+		fn.ServeHTTP(w, r)
+		return
 	}
 
-	return m.NotFound
-}
-
-func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	m.handler(r).ServeHTTP(w, r)
+	m.NotFound.ServeHTTP(w, r)
 }
