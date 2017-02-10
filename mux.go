@@ -61,7 +61,14 @@ type (
 	}
 
 	routeContext struct {
-		URLParams map[string]string
+		params params
+	}
+
+	params []param
+
+	param struct {
+		key   string
+		value string
 	}
 )
 
@@ -92,13 +99,28 @@ func newRouteParam(method string, index int) routeParam {
 }
 
 func newRouteContext() *routeContext {
-	return &routeContext{
-		URLParams: make(map[string]string),
-	}
+	return &routeContext{}
 }
 
 func routeContextExtract(r *http.Request) *routeContext {
 	return r.Context().Value(ctxRouteKey).(*routeContext)
+}
+
+func (ps *params) Set(key, value string) {
+	*ps = append(*ps, param{
+		key:   key,
+		value: value,
+	})
+}
+
+func (ps params) Get(key string) string {
+	for _, v := range ps {
+		if v.key == key {
+			return v.value
+		}
+	}
+
+	return ""
 }
 
 func isParamPattern(pattern string) bool {
@@ -113,7 +135,7 @@ func isParamPattern(pattern string) bool {
 
 func URLParam(r *http.Request, key string) string {
 	if ctx := routeContextExtract(r); ctx != nil {
-		return ctx.URLParams[key]
+		return ctx.params.Get(key)
 	}
 
 	return ""
@@ -175,7 +197,7 @@ func (n nodeParam) lookup(r *http.Request) http.HandlerFunc {
 			}
 
 			if vv[0] == byteColon {
-				ctx.URLParams[vv[1:]] = rDirs[i]
+				ctx.params.Set(vv[1:], rDirs[i])
 
 				if i == v.dirIndex {
 					return v.handlerFunc
