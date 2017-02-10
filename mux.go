@@ -56,6 +56,8 @@ type (
 	routeParamPattern struct {
 		pattern     string
 		handlerFunc http.HandlerFunc
+		dirs        []string
+		dirIndex    int
 	}
 
 	routeContext struct {
@@ -82,10 +84,10 @@ func newRouteStatic(method, pattern string) routeStatic {
 	}
 }
 
-func newRouteParam(method, pattern string) routeParam {
+func newRouteParam(method string, index int) routeParam {
 	return routeParam{
 		method:   method,
-		dirIndex: dirIndex(pattern),
+		dirIndex: index,
 	}
 }
 
@@ -123,10 +125,13 @@ func (mx *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 	}
 
 	if isParamPattern(pattern) {
-		rtp := newRouteParam(method, pattern)
-		mx.node.param.route[rtp] = append(mx.node.param.route[rtp], routeParamPattern{
+		dirs, dirIndex := dirSplit(pattern)
+		rt := newRouteParam(method, dirIndex)
+		mx.node.param.route[rt] = append(mx.node.param.route[rt], routeParamPattern{
 			pattern:     pattern,
 			handlerFunc: handlerFunc,
+			dirs:        dirs,
+			dirIndex:    dirIndex,
 		})
 
 		return
@@ -135,28 +140,16 @@ func (mx *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 	mx.node.static[newRouteStatic(method, pattern)] = handlerFunc
 }
 
-func dirIndex(dir string) int {
-	if n := charCount(dir, byteSlash); n > 0 {
-		return n - 1
-	}
-
-	return 0
-}
-
-func charCount(str string, c byte) (n int) {
-	for i := 0; i < len(str); i++ {
-		if str[i] == c {
-			n++
-		}
-	}
-
-	return n
-}
-
-func dirSplit(dir string) []string {
-	return strings.FieldsFunc(dir, func(r rune) bool {
+func dirSplit(dir string) ([]string, int) {
+	dirs := strings.FieldsFunc(dir, func(r rune) bool {
 		return r == charSlash
 	})
+
+	if len(dirs) > 0 {
+		return dirs, len(dirs) - 1
+	}
+
+	return dirs, 0
 }
 
 func (n nodeStatic) lookup(r *http.Request) http.HandlerFunc {
@@ -168,16 +161,13 @@ func (n nodeStatic) lookup(r *http.Request) http.HandlerFunc {
 }
 
 func (n nodeParam) lookup(r *http.Request) http.HandlerFunc {
-	rDirs := dirSplit(r.URL.Path)
+	rDirs, rDirIndex := dirSplit(r.URL.Path)
 	ctx := routeContextExtract(r)
 
-	for _, v := range n.route[newRouteParam(r.Method, r.URL.Path)] {
-		nDirs := dirSplit(v.pattern)
-		nDirIndex := len(nDirs) - 1
-
-		for i, vv := range nDirs {
+	for _, v := range n.route[newRouteParam(r.Method, rDirIndex)] {
+		for i, vv := range v.dirs {
 			if vv[0] == byteWildCard {
-				if i == nDirIndex {
+				if i == v.dirIndex {
 					return v.handlerFunc
 				}
 
@@ -187,7 +177,7 @@ func (n nodeParam) lookup(r *http.Request) http.HandlerFunc {
 			if vv[0] == byteColon {
 				ctx.URLParams[vv[1:]] = rDirs[i]
 
-				if i == nDirIndex {
+				if i == v.dirIndex {
 					return v.handlerFunc
 				}
 
@@ -195,7 +185,7 @@ func (n nodeParam) lookup(r *http.Request) http.HandlerFunc {
 			}
 
 			if vv == rDirs[i] {
-				if i == nDirIndex {
+				if i == v.dirIndex {
 					return v.handlerFunc
 				}
 
