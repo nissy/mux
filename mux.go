@@ -141,7 +141,7 @@ func URLParam(r *http.Request, key string) string {
 	return ""
 }
 
-func (mx *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
+func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 	if pattern[0] != byteSlash {
 		panic("There is no leading slash")
 	}
@@ -149,7 +149,7 @@ func (mx *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 	if isParamPattern(pattern) {
 		dirs, dirIndex := dirSplit(pattern)
 		rt := newRouteParam(method, dirIndex)
-		mx.node.param.route[rt] = append(mx.node.param.route[rt], routeParamPattern{
+		m.node.param.route[rt] = append(m.node.param.route[rt], routeParamPattern{
 			pattern:     pattern,
 			handlerFunc: handlerFunc,
 			dirs:        dirs,
@@ -159,7 +159,31 @@ func (mx *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 		return
 	}
 
-	mx.node.static[newRouteStatic(method, pattern)] = handlerFunc
+	m.node.static[newRouteStatic(method, pattern)] = handlerFunc
+}
+
+func (m *Mux) Get(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(GET, pattern, handlerFunc)
+}
+
+func (m *Mux) Post(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(POST, pattern, handlerFunc)
+}
+
+func (m *Mux) Put(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(PUT, pattern, handlerFunc)
+}
+
+func (m *Mux) Delete(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(DELETE, pattern, handlerFunc)
+}
+
+func (m *Mux) Head(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(HEAD, pattern, handlerFunc)
+}
+
+func (m *Mux) Options(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(OPTIONS, pattern, handlerFunc)
 }
 
 func dirSplit(dir string) ([]string, int) {
