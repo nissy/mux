@@ -17,12 +17,12 @@ const (
 )
 
 var (
-	characterColon    = ':'
-	characterWildCard = '*'
-	characterSlash    = '/'
-	byteColon         = byte(characterColon)
-	byteWildCard      = byte(characterWildCard)
-	byteSlash         = byte(characterSlash)
+	charColon    = ':'
+	charWildCard = '*'
+	charSlash    = '/'
+	byteColon    = byte(charColon)
+	byteWildCard = byte(charWildCard)
+	byteSlash    = byte(charSlash)
 )
 
 type (
@@ -135,23 +135,27 @@ func (mx *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 	mx.node.static[newRouteStatic(method, pattern)] = handlerFunc
 }
 
-func dirIndex(dir string) (n int) {
-	for i := 0; i < len(dir); i++ {
-		if dir[i] == byteSlash {
-			n++
-		}
-	}
-
-	if n > 0 {
+func dirIndex(dir string) int {
+	if n := charCount(dir, byteSlash); n > 0 {
 		return n - 1
 	}
 
 	return 0
 }
 
+func charCount(str string, c byte) (n int) {
+	for i := 0; i < len(str); i++ {
+		if str[i] == c {
+			n++
+		}
+	}
+
+	return n
+}
+
 func dirSplit(dir string) []string {
 	return strings.FieldsFunc(dir, func(r rune) bool {
-		return r == characterSlash
+		return r == charSlash
 	})
 }
 
