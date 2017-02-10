@@ -7,13 +7,13 @@ import (
 )
 
 const (
-	GET        = "GET"
-	POST       = "POST"
-	PUT        = "PUT"
-	DELETE     = "DELETE"
-	HEAD       = "HEAD"
-	OPTIONS    = "OPTIONS"
-	ctxKeyName = "mux"
+	GET         = "GET"
+	POST        = "POST"
+	PUT         = "PUT"
+	DELETE      = "DELETE"
+	HEAD        = "HEAD"
+	OPTIONS     = "OPTIONS"
+	ctxRouteKey = "mux"
 )
 
 var (
@@ -58,7 +58,7 @@ type (
 		handlerFunc http.HandlerFunc
 	}
 
-	Context struct {
+	routeContext struct {
 		URLParams map[string]string
 	}
 )
@@ -89,10 +89,14 @@ func newRouteParam(method, pattern string) routeParam {
 	}
 }
 
-func newContext() *Context {
-	return &Context{
+func newRouteContext() *routeContext {
+	return &routeContext{
 		URLParams: make(map[string]string),
 	}
+}
+
+func routeContextExtract(r *http.Request) *routeContext {
+	return r.Context().Value(ctxRouteKey).(*routeContext)
 }
 
 func isParamPattern(pattern string) bool {
@@ -106,7 +110,7 @@ func isParamPattern(pattern string) bool {
 }
 
 func URLParam(r *http.Request, key string) string {
-	if ctx := r.Context().Value(ctxKeyName).(*Context); ctx != nil {
+	if ctx := routeContextExtract(r); ctx != nil {
 		return ctx.URLParams[key]
 	}
 
@@ -129,14 +133,6 @@ func (mx *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 	}
 
 	mx.node.static[newRouteStatic(method, pattern)] = handlerFunc
-}
-
-func (n nodeStatic) routing(r *http.Request) http.HandlerFunc {
-	if fn, ok := n[newRouteStatic(r.Method, r.URL.Path)]; ok {
-		return fn
-	}
-
-	return nil
 }
 
 func dirIndex(dir string) (n int) {
@@ -163,9 +159,17 @@ func dirSplit(dir string) (ds []string) {
 	return ds
 }
 
-func (n nodeParam) routing(r *http.Request) http.HandlerFunc {
+func (n nodeStatic) lookup(r *http.Request) http.HandlerFunc {
+	if fn, ok := n[newRouteStatic(r.Method, r.URL.Path)]; ok {
+		return fn
+	}
+
+	return nil
+}
+
+func (n nodeParam) lookup(r *http.Request) http.HandlerFunc {
 	rDirs := dirSplit(r.URL.Path)
-	ctx := r.Context().Value(ctxKeyName).(*Context)
+	ctx := routeContextExtract(r)
 
 	for _, v := range n.route[newRouteParam(r.Method, r.URL.Path)] {
 		nDirs := dirSplit(v.pattern)
@@ -206,14 +210,16 @@ func (n nodeParam) routing(r *http.Request) http.HandlerFunc {
 }
 
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	r = r.WithContext(context.WithValue(r.Context(), ctxKeyName, newContext()))
+	r = r.WithContext(context.WithValue(
+		r.Context(), ctxRouteKey, newRouteContext()),
+	)
 
-	if fn := m.node.static.routing(r); fn != nil {
+	if fn := m.node.static.lookup(r); fn != nil {
 		fn.ServeHTTP(w, r)
 		return
 	}
 
-	if fn := m.node.param.routing(r); fn != nil {
+	if fn := m.node.param.lookup(r); fn != nil {
 		fn.ServeHTTP(w, r)
 		return
 	}
