@@ -174,19 +174,15 @@ func dirSplit(dir string) ([]string, int) {
 	return dirs, 0
 }
 
-func (n nodeStatic) lookup(r *http.Request) http.HandlerFunc {
-	if fn, ok := n[newRouteStatic(r.Method, r.URL.Path)]; ok {
+func (n *node) lookup(r *http.Request) http.HandlerFunc {
+	if fn, ok := n.static[newRouteStatic(r.Method, r.URL.Path)]; ok {
 		return fn
 	}
 
-	return nil
-}
-
-func (n nodeParam) lookup(r *http.Request) http.HandlerFunc {
 	rDirs, rDirIndex := dirSplit(r.URL.Path)
 	ctx := routeContextExtract(r)
 
-	for _, v := range n.route[newRouteParam(r.Method, rDirIndex)] {
+	for _, v := range n.param.route[newRouteParam(r.Method, rDirIndex)] {
 		for i, vv := range v.dirs {
 			if vv[0] == byteWildCard {
 				if i == v.dirIndex {
@@ -226,12 +222,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.Context(), ctxRouteKey, newRouteContext()),
 	)
 
-	if fn := m.node.static.lookup(r); fn != nil {
-		fn.ServeHTTP(w, r)
-		return
-	}
-
-	if fn := m.node.param.lookup(r); fn != nil {
+	if fn := m.node.lookup(r); fn != nil {
 		fn.ServeHTTP(w, r)
 		return
 	}
