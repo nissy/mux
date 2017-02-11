@@ -13,6 +13,7 @@ const (
 	DELETE      = "DELETE"
 	HEAD        = "HEAD"
 	OPTIONS     = "OPTIONS"
+	PATCH       = "PATCH"
 	ctxRouteKey = "mux"
 )
 
@@ -184,6 +185,10 @@ func (m *Mux) Head(pattern string, handlerFunc http.HandlerFunc) {
 
 func (m *Mux) Options(pattern string, handlerFunc http.HandlerFunc) {
 	m.Entry(OPTIONS, pattern, handlerFunc)
+}
+
+func (m *Mux) Patch(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(PATCH, pattern, handlerFunc)
 }
 
 func dirSplit(dir string) ([]string, int) {
