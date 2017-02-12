@@ -137,7 +137,7 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 	}
 
 	if isParamPattern(pattern) {
-		dirs, dirIndex := dirSplit(pattern)
+		dirs, dirIndex := dirResolve(pattern)
 		rt := newRouteParam(method, dirIndex)
 		m.node.param[rt] = append(m.node.param[rt], routeParamValue{
 			pattern:     pattern,
@@ -180,7 +180,7 @@ func (m *Mux) Patch(pattern string, handlerFunc http.HandlerFunc) {
 	m.Entry(PATCH, pattern, handlerFunc)
 }
 
-func dirSplit(dir string) ([]string, int) {
+func dirResolve(dir string) ([]string, int) {
 	dirs := strings.FieldsFunc(dir, func(r rune) bool {
 		return r == charSlash
 	})
@@ -197,7 +197,7 @@ func (n *node) lookup(r *http.Request) (http.HandlerFunc, *routeContext) {
 		return fn, nil
 	}
 
-	rDirs, rDirIndex := dirSplit(r.URL.Path)
+	rDirs, rDirIndex := dirResolve(r.URL.Path)
 	ctx := newRouteContext()
 
 	for _, v := range n.param[newRouteParam(r.Method, rDirIndex)] {
