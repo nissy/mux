@@ -33,20 +33,13 @@ type (
 	}
 
 	node struct {
-		static nodeStatic
-		param  nodeParam
+		static map[routeStatic]http.HandlerFunc
+		param  map[routeParam][]routeParamValue
 	}
-
-	nodeStatic map[routeStatic]http.HandlerFunc
 
 	routeStatic struct {
 		method  string
 		pattern string
-	}
-
-	nodeParam struct {
-		route       map[routeParam][]routeParamPattern
-		handlerFunc http.HandlerFunc
 	}
 
 	routeParam struct {
@@ -54,7 +47,7 @@ type (
 		dirIndex int
 	}
 
-	routeParamPattern struct {
+	routeParamValue struct {
 		pattern     string
 		handlerFunc http.HandlerFunc
 		dirs        []string
@@ -76,9 +69,7 @@ type (
 func NewMux() *Mux {
 	return &Mux{
 		node: &node{
-			param: nodeParam{
-				route: make(map[routeParam][]routeParamPattern),
-			},
+			param:  make(map[routeParam][]routeParamValue),
 			static: make(map[routeStatic]http.HandlerFunc),
 		},
 		NotFound: http.NotFound,
@@ -148,7 +139,7 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 	if isParamPattern(pattern) {
 		dirs, dirIndex := dirSplit(pattern)
 		rt := newRouteParam(method, dirIndex)
-		m.node.param.route[rt] = append(m.node.param.route[rt], routeParamPattern{
+		m.node.param[rt] = append(m.node.param[rt], routeParamValue{
 			pattern:     pattern,
 			handlerFunc: handlerFunc,
 			dirs:        dirs,
@@ -209,7 +200,7 @@ func (n *node) lookup(r *http.Request) (http.HandlerFunc, *routeContext) {
 	rDirs, rDirIndex := dirSplit(r.URL.Path)
 	ctx := newRouteContext()
 
-	for _, v := range n.param.route[newRouteParam(r.Method, rDirIndex)] {
+	for _, v := range n.param[newRouteParam(r.Method, rDirIndex)] {
 		for i, vv := range v.dirs {
 			if vv[0] == byteWildCard {
 				if i == v.dirIndex {
