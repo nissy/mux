@@ -103,10 +103,6 @@ func newRouteContext() *routeContext {
 	return &routeContext{}
 }
 
-func routeContextExtract(r *http.Request) *routeContext {
-	return r.Context().Value(ctxRouteKey).(*routeContext)
-}
-
 func (ps *params) Set(key, value string) {
 	*ps = append(*ps, param{
 		key:   key,
@@ -135,8 +131,10 @@ func isParamPattern(pattern string) bool {
 }
 
 func URLParam(r *http.Request, key string) string {
-	if ctx := routeContextExtract(r); ctx != nil {
-		return ctx.params.Get(key)
+	if ctx := r.Context().Value(ctxRouteKey); ctx != nil {
+		if ctx, ok := ctx.(*routeContext); ok {
+			return ctx.params.Get(key)
+		}
 	}
 
 	return ""
@@ -203,19 +201,19 @@ func dirSplit(dir string) ([]string, int) {
 	return dirs, 0
 }
 
-func (n *node) lookup(r *http.Request) http.HandlerFunc {
+func (n *node) lookup(r *http.Request) (http.HandlerFunc, *routeContext) {
 	if fn, ok := n.static[newRouteStatic(r.Method, r.URL.Path)]; ok {
-		return fn
+		return fn, nil
 	}
 
 	rDirs, rDirIndex := dirSplit(r.URL.Path)
-	ctx := routeContextExtract(r)
+	ctx := newRouteContext()
 
 	for _, v := range n.param.route[newRouteParam(r.Method, rDirIndex)] {
 		for i, vv := range v.dirs {
 			if vv[0] == byteWildCard {
 				if i == v.dirIndex {
-					return v.handlerFunc
+					return v.handlerFunc, ctx
 				}
 
 				continue
@@ -225,7 +223,7 @@ func (n *node) lookup(r *http.Request) http.HandlerFunc {
 				ctx.params.Set(vv[1:], rDirs[i])
 
 				if i == v.dirIndex {
-					return v.handlerFunc
+					return v.handlerFunc, ctx
 				}
 
 				continue
@@ -233,7 +231,7 @@ func (n *node) lookup(r *http.Request) http.HandlerFunc {
 
 			if vv == rDirs[i] {
 				if i == v.dirIndex {
-					return v.handlerFunc
+					return v.handlerFunc, ctx
 				}
 
 				continue
@@ -243,15 +241,18 @@ func (n *node) lookup(r *http.Request) http.HandlerFunc {
 		}
 	}
 
-	return nil
+	return nil, nil
 }
 
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	r = r.WithContext(context.WithValue(
-		r.Context(), ctxRouteKey, newRouteContext()),
-	)
+	if fn, ctx := m.node.lookup(r); fn != nil {
+		if ctx != nil {
+			fn.ServeHTTP(w, r.WithContext(context.WithValue(
+				r.Context(), ctxRouteKey, ctx),
+			))
+			return
+		}
 
-	if fn := m.node.lookup(r); fn != nil {
 		fn.ServeHTTP(w, r)
 		return
 	}
