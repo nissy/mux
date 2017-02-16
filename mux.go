@@ -3,7 +3,6 @@ package mux
 import (
 	"context"
 	"net/http"
-	"strings"
 )
 
 const (
@@ -19,42 +18,28 @@ const (
 
 var (
 	charColon    = ':'
-	charWildCard = '*'
+	charWildcard = '*'
 	charSlash    = '/'
 	byteColon    = byte(charColon)
-	byteWildCard = byte(charWildCard)
+	byteWildcard = byte(charWildcard)
 	byteSlash    = byte(charSlash)
 )
 
 type (
 	Mux struct {
-		node     *node
+		tree     []*node
+		static   map[string]http.HandlerFunc
 		NotFound http.HandlerFunc
 	}
 
 	node struct {
-		static map[routeStatic]http.HandlerFunc
-		param  map[routeParam][]routeParamValue
+		child       map[byte]*node
+		edge        byte
+		handlerFunc http.HandlerFunc //End is handlerFunc != nil
+		param       string
 	}
 
-	routeStatic struct {
-		method  string
-		pattern string
-	}
-
-	routeParam struct {
-		method   string
-		dirIndex int
-	}
-
-	routeParamValue struct {
-		pattern     string
-		handlerFunc http.HandlerFunc
-		dirs        []string
-		dirIndex    int
-	}
-
-	routeContext struct {
+	rContext struct {
 		params params
 	}
 
@@ -67,31 +52,16 @@ type (
 )
 
 func NewMux() *Mux {
-	return &Mux{
-		node: &node{
-			param:  make(map[routeParam][]routeParamValue),
-			static: make(map[routeStatic]http.HandlerFunc),
-		},
+	m := &Mux{
+		static:   make(map[string]http.HandlerFunc),
 		NotFound: http.NotFound,
 	}
-}
 
-func newRouteStatic(method, pattern string) routeStatic {
-	return routeStatic{
-		method:  method,
-		pattern: pattern,
-	}
-}
+	m.tree = append(m.tree, &node{
+		child: make(map[byte]*node),
+	})
 
-func newRouteParam(method string, index int) routeParam {
-	return routeParam{
-		method:   method,
-		dirIndex: index,
-	}
-}
-
-func newRouteContext() *routeContext {
-	return &routeContext{}
+	return m
 }
 
 func (ps *params) Set(key, value string) {
@@ -111,19 +81,9 @@ func (ps params) Get(key string) string {
 	return ""
 }
 
-func isParamPattern(pattern string) bool {
-	for i := 0; i < len(pattern); i++ {
-		if pattern[i] == byteColon || pattern[i] == byteWildCard {
-			return true
-		}
-	}
-
-	return false
-}
-
 func URLParam(r *http.Request, key string) string {
 	if ctx := r.Context().Value(ctxRouteKey); ctx != nil {
-		if ctx, ok := ctx.(*routeContext); ok {
+		if ctx, ok := ctx.(*rContext); ok {
 			return ctx.params.Get(key)
 		}
 	}
@@ -131,25 +91,14 @@ func URLParam(r *http.Request, key string) string {
 	return ""
 }
 
-func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
-	if pattern[0] != byteSlash {
-		panic("There is no leading slash")
+func isStaticPattern(pattern string) bool {
+	for i := 0; i < len(pattern); i++ {
+		if pattern[i] == byteColon || pattern[i] == byteWildcard {
+			return false
+		}
 	}
 
-	if isParamPattern(pattern) {
-		dirs, dirIndex := dirResolve(pattern)
-		rt := newRouteParam(method, dirIndex)
-		m.node.param[rt] = append(m.node.param[rt], routeParamValue{
-			pattern:     pattern,
-			handlerFunc: handlerFunc,
-			dirs:        dirs,
-			dirIndex:    dirIndex,
-		})
-
-		return
-	}
-
-	m.node.static[newRouteStatic(method, pattern)] = handlerFunc
+	return true
 }
 
 func (m *Mux) Get(pattern string, handlerFunc http.HandlerFunc) {
@@ -180,63 +129,143 @@ func (m *Mux) Patch(pattern string, handlerFunc http.HandlerFunc) {
 	m.Entry(PATCH, pattern, handlerFunc)
 }
 
-func dirResolve(dir string) ([]string, int) {
-	dirs := strings.FieldsFunc(dir, func(r rune) bool {
-		return r == charSlash
-	})
-
-	if len(dirs) > 0 {
-		return dirs, len(dirs) - 1
+func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
+	if pattern[0] != byteSlash {
+		panic("There is no leading slash")
 	}
 
-	return dirs, 0
+	s := method + pattern
+
+	if isStaticPattern(pattern) {
+		m.static[s] = handlerFunc
+		return
+	}
+
+	for i := 0; i < len(s); i++ {
+		edge := s[i]
+
+		if i > len(m.tree)-1 {
+			m.tree = append(m.tree, &node{
+				child: make(map[byte]*node),
+			})
+		}
+
+		if _, ok := m.tree[i].child[edge]; ok {
+			continue
+		}
+
+		n := &node{}
+
+		if i == len(s)-1 {
+			n.handlerFunc = handlerFunc
+		}
+
+		if edge == byteColon {
+			for ii := i; ii < len(s); ii++ {
+				if s[ii] == byteSlash {
+					n.param = s[i+1 : ii]
+					m.tree[i].child[edge] = n
+					i += ii - 1
+
+					break
+				}
+				if ii == len(s)-1 {
+					n.handlerFunc = handlerFunc
+					n.param = s[i+1 : ii+1]
+					m.tree[i].child[edge] = n
+					i += ii - 1
+
+					break
+				}
+			}
+
+			continue
+		}
+
+		if edge == byteWildcard {
+			for ii := i; ii < len(s); ii++ {
+				if s[ii] == byteSlash || ii == len(s)-1 {
+					if ii == len(s)-1 {
+						n.handlerFunc = handlerFunc
+					}
+
+					m.tree[i].child[edge] = n
+					i += ii - 1
+
+					break
+				}
+			}
+
+			continue
+		}
+
+		m.tree[i].child[edge] = n
+	}
 }
 
-func (n *node) lookup(r *http.Request) (http.HandlerFunc, *routeContext) {
-	if fn, ok := n.static[newRouteStatic(r.Method, r.URL.Path)]; ok {
+func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
+	s := r.Method + r.URL.Path
+
+	if fn, ok := m.static[s]; ok {
 		return fn, nil
 	}
 
-	rDirs, rDirIndex := dirResolve(r.URL.Path)
-	ctx := newRouteContext()
+	ctx := &rContext{}
 
-	for _, v := range n.param[newRouteParam(r.Method, rDirIndex)] {
-		for i, vv := range v.dirs {
-			if vv[0] == byteWildCard {
-				if i == v.dirIndex {
-					return v.handlerFunc, ctx
-				}
+	for i := 0; i < len(s); i++ {
+		edge := s[i]
 
-				continue
+		if _, ok := m.tree[i].child[edge]; ok {
+			if m.tree[i].child[edge].handlerFunc != nil {
+				return m.tree[i].child[edge].handlerFunc, ctx
 			}
 
-			if vv[0] == byteColon {
-				ctx.params.Set(vv[1:], rDirs[i])
-
-				if i == v.dirIndex {
-					return v.handlerFunc, ctx
-				}
-
-				continue
-			}
-
-			if vv == rDirs[i] {
-				if i == v.dirIndex {
-					return v.handlerFunc, ctx
-				}
-
-				continue
-			}
-
-			break
+			continue
 		}
+
+		if n, ok := m.tree[i].child[byteColon]; ok {
+			for ii := i; ii < len(s); ii++ {
+				if s[ii] == byteSlash {
+					ctx.params.Set(n.param, s[i:ii])
+					i += ii
+					break
+				}
+				if ii == len(s)-1 {
+					ctx.params.Set(n.param, s[i:ii+1])
+					i += ii
+					break
+				}
+			}
+			if n.handlerFunc != nil {
+				return n.handlerFunc, ctx
+			}
+
+			continue
+		}
+
+		if n, ok := m.tree[i].child[byteWildcard]; ok {
+			for ii := i; ii < len(s); ii++ {
+				if s[ii] == byteSlash || ii+i == len(s)-1 {
+					i += ii
+					break
+				}
+			}
+
+			if n.handlerFunc != nil {
+				return n.handlerFunc, ctx
+			}
+
+			continue
+		}
+
+		break
 	}
 
 	return nil, nil
 }
 
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if fn, ctx := m.node.lookup(r); fn != nil {
+	if fn, ctx := m.lookup(r); fn != nil {
 		if ctx != nil {
 			fn.ServeHTTP(w, r.WithContext(context.WithValue(
 				r.Context(), ctxRouteKey, ctx),
