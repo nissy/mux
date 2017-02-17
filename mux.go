@@ -34,7 +34,6 @@ type (
 
 	node struct {
 		child       map[byte]*node
-		edge        byte
 		handlerFunc http.HandlerFunc //End is handlerFunc != nil
 		param       string
 	}
@@ -52,16 +51,10 @@ type (
 )
 
 func NewMux() *Mux {
-	m := &Mux{
+	return &Mux{
 		static:   make(map[string]http.HandlerFunc),
 		NotFound: http.NotFound,
 	}
-
-	m.tree = append(m.tree, &node{
-		child: make(map[byte]*node),
-	})
-
-	return m
 }
 
 func (ps *params) Set(key, value string) {
@@ -141,65 +134,57 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 		return
 	}
 
+	var treeIndex int
+
 	for i := 0; i < len(s); i++ {
 		edge := s[i]
 
-		if i > len(m.tree)-1 {
+		if treeIndex == len(m.tree) {
 			m.tree = append(m.tree, &node{
 				child: make(map[byte]*node),
 			})
 		}
 
-		if _, ok := m.tree[i].child[edge]; ok {
+		tree := m.tree[treeIndex]
+
+		if _, ok := tree.child[edge]; ok {
+			treeIndex += 1
 			continue
 		}
 
 		n := &node{}
 
-		if i == len(s)-1 {
-			n.handlerFunc = handlerFunc
-		}
-
 		if edge == byteColon {
-			for ii := i; ii < len(s); ii++ {
-				if s[ii] == byteSlash {
-					n.param = s[i+1 : ii]
-					m.tree[i].child[edge] = n
-					i += ii - 1
+			p := []byte{}
 
+			for ; i < len(s); i++ {
+				if s[i] == byteSlash {
+					i -= 1
 					break
 				}
-				if ii == len(s)-1 {
-					n.handlerFunc = handlerFunc
-					n.param = s[i+1 : ii+1]
-					m.tree[i].child[edge] = n
-					i += ii - 1
-
-					break
+				if s[i] != byteColon {
+					p = append(p, s[i])
 				}
 			}
 
-			continue
+			n.param = string(p)
 		}
 
 		if edge == byteWildcard {
-			for ii := i; ii < len(s); ii++ {
-				if s[ii] == byteSlash || ii == len(s)-1 {
-					if ii == len(s)-1 {
-						n.handlerFunc = handlerFunc
-					}
-
-					m.tree[i].child[edge] = n
-					i += ii - 1
-
+			for ; i < len(s); i++ {
+				if s[i] == byteSlash {
+					i -= 1
 					break
 				}
 			}
-
-			continue
 		}
 
-		m.tree[i].child[edge] = n
+		if i >= len(s)-1 {
+			n.handlerFunc = handlerFunc
+		}
+
+		treeIndex += 1
+		tree.child[edge] = n
 	}
 }
 
@@ -210,32 +195,42 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 		return fn, nil
 	}
 
+	if len(m.tree) == 0 {
+		return nil, nil
+	}
+
 	ctx := &rContext{}
+
+	var treeIndex int
 
 	for i := 0; i < len(s); i++ {
 		edge := s[i]
 
-		if _, ok := m.tree[i].child[edge]; ok {
-			if m.tree[i].child[edge].handlerFunc != nil {
-				return m.tree[i].child[edge].handlerFunc, ctx
+		tree := m.tree[treeIndex]
+		treeIndex += 1
+
+		if _, ok := tree.child[edge]; ok {
+			if tree.child[edge].handlerFunc != nil {
+				return tree.child[edge].handlerFunc, ctx
 			}
 
 			continue
 		}
 
-		if n, ok := m.tree[i].child[byteColon]; ok {
-			for ii := i; ii < len(s); ii++ {
-				if s[ii] == byteSlash {
-					ctx.params.Set(n.param, s[i:ii])
-					i += ii
+		if n, ok := tree.child[byteColon]; ok {
+			p := []byte{}
+
+			for ; i < len(s); i++ {
+				if s[i] == byteSlash {
+					i -= 1
 					break
 				}
-				if ii == len(s)-1 {
-					ctx.params.Set(n.param, s[i:ii+1])
-					i += ii
-					break
-				}
+
+				p = append(p, s[i])
 			}
+
+			ctx.params.Set(n.param, string(p))
+
 			if n.handlerFunc != nil {
 				return n.handlerFunc, ctx
 			}
@@ -243,10 +238,10 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 			continue
 		}
 
-		if n, ok := m.tree[i].child[byteWildcard]; ok {
-			for ii := i; ii < len(s); ii++ {
-				if s[ii] == byteSlash || ii+i == len(s)-1 {
-					i += ii
+		if n, ok := tree.child[byteWildcard]; ok {
+			for ; i < len(s); i++ {
+				if s[i] == byteSlash {
+					i -= 1
 					break
 				}
 			}
