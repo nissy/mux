@@ -17,12 +17,9 @@ const (
 )
 
 var (
-	charColon    = ':'
-	charWildcard = '*'
-	charSlash    = '/'
-	byteColon    = byte(charColon)
-	byteWildcard = byte(charWildcard)
-	byteSlash    = byte(charSlash)
+	byteColon    = byte(':')
+	byteWildcard = byte('*')
+	byteSlash    = byte('/')
 )
 
 type (
@@ -34,7 +31,7 @@ type (
 
 	node struct {
 		child       map[byte]*node
-		handlerFunc http.HandlerFunc //End is handlerFunc != nil
+		handlerFunc http.HandlerFunc //end is handlerFunc != nil
 		param       string
 	}
 
