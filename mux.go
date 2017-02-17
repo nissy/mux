@@ -206,7 +206,6 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 	}
 
 	ctx := &rContext{}
-
 	var treeIndex int
 
 	for i := 0; i < len(s); i++ {
@@ -253,7 +252,7 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 
 			ctx.params.Set(n.param, string(p))
 
-			if i == len(s)-1 {
+			if i >= len(s)-1 {
 				if n.handlerFunc != nil {
 					return n.handlerFunc, ctx
 				}
@@ -271,7 +270,7 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 				}
 			}
 
-			if i == len(s)-1 {
+			if i >= len(s)-1 {
 				if n.handlerFunc != nil {
 					return n.handlerFunc, ctx
 				}
