@@ -10,23 +10,27 @@ func main() {
 	m := mux.NewMux()
 
 	m.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("/"))
+		w.Write([]byte("/ | static"))
 	})
 
 	m.Get("/a", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("/a"))
+		w.Write([]byte("/a | static"))
+	})
+
+	m.Get("/*", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("/* | asterisk"))
 	})
 
 	m.Get("/a/:id", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("/a/:id | " + mux.URLParam(r, "id")))
+		w.Write([]byte("/a/:id | Param id is " + mux.URLParam(r, "id")))
 	})
 
 	m.Get("/a/b/:id/d", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("/a/b/:id/d | " + mux.URLParam(r, "id")))
+		w.Write([]byte("/a/b/:id/d | Param id is " + mux.URLParam(r, "id")))
 	})
 
 	m.Get("/a/b/:id/dd", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("/a/b/:id/dd | " + mux.URLParam(r, "id")))
+		w.Write([]byte("/a/b/:id/dd | Param id is " + mux.URLParam(r, "id")))
 	})
 
 	http.ListenAndServe(":8080", m)

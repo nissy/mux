@@ -231,6 +231,12 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 							return n.handlerFunc, ctx
 						}
 					}
+
+					if n, ok := m.tree[treeIndex].child[byteWildcard]; ok {
+						if n.handlerFunc != nil {
+							return n.handlerFunc, ctx
+						}
+					}
 				}
 			}
 
@@ -296,6 +302,24 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 				}
 
 				ctx.params.Set(n.param, string(p))
+
+				if i >= len(s)-1 {
+					if n.handlerFunc != nil {
+						return n.handlerFunc, ctx
+					}
+				}
+
+				treeIndex += 1
+				continue
+			}
+
+			if n, ok := m.tree[treeIndex-1].child[byteWildcard]; ok {
+				for ; i < len(s); i++ {
+					if s[i] == byteSlash {
+						i -= 1
+						break
+					}
+				}
 
 				if i >= len(s)-1 {
 					if n.handlerFunc != nil {
