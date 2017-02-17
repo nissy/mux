@@ -153,15 +153,15 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 
 		if edge == byteColon {
 			p := []byte{}
+			i += 1
 
 			for ; i < len(s); i++ {
 				if s[i] == byteSlash {
 					i -= 1
 					break
 				}
-				if s[i] != byteColon {
-					p = append(p, s[i])
-				}
+
+				p = append(p, s[i])
 			}
 
 			n.param = string(p)
@@ -180,8 +180,8 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 			n.handlerFunc = handlerFunc
 		}
 
-		treeIndex += 1
 		tree.child[edge] = n
+		treeIndex += 1
 	}
 }
 
@@ -201,18 +201,32 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 	var treeIndex int
 
 	for i := 0; i < len(s); i++ {
-		edge := s[i]
+		if treeIndex > len(m.tree)-1 {
+			break
+		}
 
+		edge := s[i]
 		tree := m.tree[treeIndex]
-		treeIndex += 1
 
 		if _, ok := tree.child[edge]; ok {
 			if tree.child[edge].handlerFunc != nil {
 				return tree.child[edge].handlerFunc, ctx
 			}
 
+			treeIndex += 1
 			continue
 		}
+
+		//// BACKTRACK!!
+		//if treeIndex > 0 {
+		//
+		//	if _, ok := m.tree[treeIndex-1].child[byteColon]; ok {
+		//		treeIndex -= 1
+		//		//i -= 1
+		//	}
+		//
+		//	tree = m.tree[treeIndex]
+		//}
 
 		if n, ok := tree.child[byteColon]; ok {
 			p := []byte{}
@@ -228,10 +242,13 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 
 			ctx.params.Set(n.param, string(p))
 
-			if n.handlerFunc != nil {
-				return n.handlerFunc, ctx
+			if i >= len(s)-1 {
+				if n.handlerFunc != nil {
+					return n.handlerFunc, ctx
+				}
 			}
 
+			treeIndex += 1
 			continue
 		}
 
@@ -243,10 +260,13 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 				}
 			}
 
-			if n.handlerFunc != nil {
-				return n.handlerFunc, ctx
+			if i >= len(s)-1 {
+				if n.handlerFunc != nil {
+					return n.handlerFunc, ctx
+				}
 			}
 
+			treeIndex += 1
 			continue
 		}
 
