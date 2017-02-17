@@ -145,6 +145,15 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 		tree := m.tree[treeIndex]
 
 		if _, ok := tree.child[edge]; ok {
+			if edge == byteColon || edge == byteWildcard {
+				for ; i < len(s); i++ {
+					if s[i] == byteSlash {
+						i -= 1
+						break
+					}
+				}
+			}
+
 			treeIndex += 1
 			continue
 		}
@@ -209,8 +218,10 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 		tree := m.tree[treeIndex]
 
 		if _, ok := tree.child[edge]; ok {
-			if tree.child[edge].handlerFunc != nil {
-				return tree.child[edge].handlerFunc, ctx
+			if i == len(s)-1 {
+				if tree.child[edge].handlerFunc != nil {
+					return tree.child[edge].handlerFunc, ctx
+				}
 			}
 
 			treeIndex += 1
@@ -242,7 +253,7 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 
 			ctx.params.Set(n.param, string(p))
 
-			if i >= len(s)-1 {
+			if i == len(s)-1 {
 				if n.handlerFunc != nil {
 					return n.handlerFunc, ctx
 				}
@@ -260,7 +271,7 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 				}
 			}
 
-			if i >= len(s)-1 {
+			if i == len(s)-1 {
 				if n.handlerFunc != nil {
 					return n.handlerFunc, ctx
 				}
