@@ -17,9 +17,9 @@ const (
 )
 
 var (
-	byteColon    = byte(':')
-	byteWildcard = byte('*')
-	byteSlash    = byte('/')
+	colon    = byte(':')
+	slash    = byte('/')
+	wildcard = byte('*')
 )
 
 type (
@@ -54,6 +54,16 @@ func NewMux() *Mux {
 	}
 }
 
+func (m *Mux) findNode(index int, edge byte) *node {
+	if len(m.tree) >= index {
+		if n, ok := m.tree[index].child[edge]; ok {
+			return n
+		}
+	}
+
+	return nil
+}
+
 func (ps *params) Set(key, value string) {
 	*ps = append(*ps, param{
 		key:   key,
@@ -83,7 +93,7 @@ func URLParam(r *http.Request, key string) string {
 
 func isStaticPattern(pattern string) bool {
 	for i := 0; i < len(pattern); i++ {
-		if pattern[i] == byteColon || pattern[i] == byteWildcard {
+		if pattern[i] == colon || pattern[i] == wildcard {
 			return false
 		}
 	}
@@ -120,7 +130,7 @@ func (m *Mux) Patch(pattern string, handlerFunc http.HandlerFunc) {
 }
 
 func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
-	if pattern[0] != byteSlash {
+	if pattern[0] != slash {
 		panic("There is no leading slash")
 	}
 
@@ -142,12 +152,10 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 			})
 		}
 
-		tree := m.tree[treeIndex]
-
-		if _, ok := tree.child[edge]; ok {
-			if edge == byteColon || edge == byteWildcard {
+		if _, ok := m.tree[treeIndex].child[edge]; ok {
+			if edge == colon || edge == wildcard {
 				for ; i < len(s); i++ {
-					if s[i] == byteSlash {
+					if s[i] == slash {
 						i -= 1
 						break
 					}
@@ -160,12 +168,12 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 
 		n := &node{}
 
-		if edge == byteColon {
+		if edge == colon {
 			p := []byte{}
 			i += 1
 
 			for ; i < len(s); i++ {
-				if s[i] == byteSlash {
+				if s[i] == slash {
 					i -= 1
 					break
 				}
@@ -176,9 +184,9 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 			n.param = string(p)
 		}
 
-		if edge == byteWildcard {
+		if edge == wildcard {
 			for ; i < len(s); i++ {
-				if s[i] == byteSlash {
+				if s[i] == slash {
 					i -= 1
 					break
 				}
@@ -189,7 +197,7 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 			n.handlerFunc = handlerFunc
 		}
 
-		tree.child[edge] = n
+		m.tree[treeIndex].child[edge] = n
 		treeIndex += 1
 	}
 }
@@ -214,17 +222,16 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 		}
 
 		edge := s[i]
-		tree := m.tree[treeIndex]
 
-		if _, ok := tree.child[edge]; ok {
+		if n := m.findNode(treeIndex, edge); n != nil {
 			if i == len(s)-1 {
-				if tree.child[edge].handlerFunc != nil {
-					return tree.child[edge].handlerFunc, ctx
+				if n.handlerFunc != nil {
+					return n.handlerFunc, ctx
 				}
 
 				// BACKTRACK
 				if treeIndex > 0 {
-					if n, ok := m.tree[treeIndex].child[byteColon]; ok {
+					if n := m.findNode(treeIndex, colon); n != nil {
 						ctx.params.Set(n.param, string(s[i]))
 
 						if n.handlerFunc != nil {
@@ -232,7 +239,7 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 						}
 					}
 
-					if n, ok := m.tree[treeIndex].child[byteWildcard]; ok {
+					if n := m.findNode(treeIndex, wildcard); n != nil {
 						if n.handlerFunc != nil {
 							return n.handlerFunc, ctx
 						}
@@ -244,11 +251,21 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 			continue
 		}
 
-		if n, ok := tree.child[byteColon]; ok {
+		// PARAM NODE
+		var pNode *node
+
+		if pNode = m.findNode(treeIndex, colon); pNode == nil {
+			// BACKTRACK
+			if treeIndex > 0 {
+				pNode = m.findNode(treeIndex-1, colon)
+			}
+		}
+
+		if pNode != nil {
 			p := []byte{}
 
 			for ; i < len(s); i++ {
-				if s[i] == byteSlash {
+				if s[i] == slash {
 					i -= 1
 					break
 				}
@@ -256,11 +273,11 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 				p = append(p, s[i])
 			}
 
-			ctx.params.Set(n.param, string(p))
+			ctx.params.Set(pNode.param, string(p))
 
 			if i >= len(s)-1 {
-				if n.handlerFunc != nil {
-					return n.handlerFunc, ctx
+				if pNode.handlerFunc != nil {
+					return pNode.handlerFunc, ctx
 				}
 			}
 
@@ -268,68 +285,32 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 			continue
 		}
 
-		if n, ok := tree.child[byteWildcard]; ok {
+		// WILDCARD NODE
+		var wNode *node
+
+		if wNode = m.findNode(treeIndex, wildcard); wNode == nil {
+			// BACKTRACK
+			if treeIndex > 0 {
+				wNode = m.findNode(treeIndex-1, wildcard)
+			}
+		}
+
+		if wNode != nil {
 			for ; i < len(s); i++ {
-				if s[i] == byteSlash {
+				if s[i] == slash {
 					i -= 1
 					break
 				}
 			}
 
 			if i >= len(s)-1 {
-				if n.handlerFunc != nil {
-					return n.handlerFunc, ctx
+				if wNode.handlerFunc != nil {
+					return wNode.handlerFunc, ctx
 				}
 			}
 
 			treeIndex += 1
 			continue
-		}
-
-		// BACKTRACK
-		if treeIndex > 0 {
-			if n, ok := m.tree[treeIndex-1].child[byteColon]; ok {
-				p := []byte{}
-				i -= 1
-
-				for ; i < len(s); i++ {
-					if s[i] == byteSlash {
-						i -= 1
-						break
-					}
-
-					p = append(p, s[i])
-				}
-
-				ctx.params.Set(n.param, string(p))
-
-				if i >= len(s)-1 {
-					if n.handlerFunc != nil {
-						return n.handlerFunc, ctx
-					}
-				}
-
-				treeIndex += 1
-				continue
-			}
-
-			if n, ok := m.tree[treeIndex-1].child[byteWildcard]; ok {
-				for ; i < len(s); i++ {
-					if s[i] == byteSlash {
-						i -= 1
-						break
-					}
-				}
-
-				if i >= len(s)-1 {
-					if n.handlerFunc != nil {
-						return n.handlerFunc, ctx
-					}
-				}
-
-				treeIndex += 1
-				continue
-			}
 		}
 
 		break

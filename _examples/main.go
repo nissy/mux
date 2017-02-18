@@ -33,5 +33,9 @@ func main() {
 		w.Write([]byte("/a/b/:id/dd | Param id is " + mux.URLParam(r, "id")))
 	})
 
+	m.Get("/a/b/:id/:name", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("/a/b/:id/:name | Param id is " + mux.URLParam(r, "id") + " " + mux.URLParam(r, "name")))
+	})
+
 	http.ListenAndServe(":8080", m)
 }
