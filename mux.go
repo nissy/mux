@@ -176,8 +176,10 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 				}
 			}
 
-			treeIndex += 1
-			continue
+			if i < len(s)-1 {
+				treeIndex += 1
+				continue
+			}
 		}
 
 		n := &node{}
