@@ -6,14 +6,14 @@ import (
 )
 
 const (
-	GET         = "GET"
-	POST        = "POST"
-	PUT         = "PUT"
-	DELETE      = "DELETE"
-	HEAD        = "HEAD"
-	OPTIONS     = "OPTIONS"
-	PATCH       = "PATCH"
-	ctxRouteKey = "mux"
+	GET     = "GET"
+	POST    = "POST"
+	PUT     = "PUT"
+	DELETE  = "DELETE"
+	HEAD    = "HEAD"
+	OPTIONS = "OPTIONS"
+	PATCH   = "PATCH"
+	rCtxKey = "mux"
 )
 
 var (
@@ -35,7 +35,7 @@ type (
 		param       string
 	}
 
-	rContext struct {
+	rCtx struct {
 		params params
 	}
 
@@ -64,6 +64,20 @@ func (m *Mux) findNode(index int, edge byte) *node {
 	return nil
 }
 
+func (m *Mux) findNodeBack(index int, edge byte) *node {
+	if n := m.findNode(index, edge); n != nil {
+		return n
+	}
+
+	if index > 0 {
+		if n := m.findNode(index-1, edge); n != nil {
+			return n
+		}
+	}
+
+	return nil
+}
+
 func (ps *params) Set(key, value string) {
 	*ps = append(*ps, param{
 		key:   key,
@@ -82,8 +96,8 @@ func (ps params) Get(key string) string {
 }
 
 func URLParam(r *http.Request, key string) string {
-	if ctx := r.Context().Value(ctxRouteKey); ctx != nil {
-		if ctx, ok := ctx.(*rContext); ok {
+	if ctx := r.Context().Value(rCtxKey); ctx != nil {
+		if ctx, ok := ctx.(*rCtx); ok {
 			return ctx.params.Get(key)
 		}
 	}
@@ -202,7 +216,7 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 	}
 }
 
-func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
+func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 	s := r.Method + r.URL.Path
 
 	if fn, ok := m.static[s]; ok {
@@ -213,7 +227,7 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 		return nil, nil
 	}
 
-	ctx := &rContext{}
+	ctx := &rCtx{}
 	var treeIndex int
 
 	for i := 0; i < len(s); i++ {
@@ -251,17 +265,8 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 			continue
 		}
 
-		// PARAM NODE
-		var pNode *node
-
-		if pNode = m.findNode(treeIndex, colon); pNode == nil {
-			// BACKTRACK
-			if treeIndex > 0 {
-				pNode = m.findNode(treeIndex-1, colon)
-			}
-		}
-
-		if pNode != nil {
+		// PARAM
+		if n := m.findNodeBack(treeIndex, colon); n != nil {
 			p := []byte{}
 
 			for ; i < len(s); i++ {
@@ -273,11 +278,11 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 				p = append(p, s[i])
 			}
 
-			ctx.params.Set(pNode.param, string(p))
+			ctx.params.Set(n.param, string(p))
 
 			if i >= len(s)-1 {
-				if pNode.handlerFunc != nil {
-					return pNode.handlerFunc, ctx
+				if n.handlerFunc != nil {
+					return n.handlerFunc, ctx
 				}
 			}
 
@@ -285,17 +290,8 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 			continue
 		}
 
-		// WILDCARD NODE
-		var wNode *node
-
-		if wNode = m.findNode(treeIndex, wildcard); wNode == nil {
-			// BACKTRACK
-			if treeIndex > 0 {
-				wNode = m.findNode(treeIndex-1, wildcard)
-			}
-		}
-
-		if wNode != nil {
+		// WILDCARD
+		if n := m.findNodeBack(treeIndex, wildcard); n != nil {
 			for ; i < len(s); i++ {
 				if s[i] == slash {
 					i -= 1
@@ -304,8 +300,8 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rContext) {
 			}
 
 			if i >= len(s)-1 {
-				if wNode.handlerFunc != nil {
-					return wNode.handlerFunc, ctx
+				if n.handlerFunc != nil {
+					return n.handlerFunc, ctx
 				}
 			}
 
@@ -323,7 +319,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if fn, ctx := m.lookup(r); fn != nil {
 		if ctx != nil {
 			fn.ServeHTTP(w, r.WithContext(context.WithValue(
-				r.Context(), ctxRouteKey, ctx),
+				r.Context(), rCtxKey, ctx),
 			))
 			return
 		}
