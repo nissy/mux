@@ -166,23 +166,11 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 			})
 		}
 
-		if _, ok := m.tree[treeIndex].child[edge]; ok {
-			if edge == colon || edge == wildcard {
-				for ; i < len(s); i++ {
-					if s[i] == slash {
-						i -= 1
-						break
-					}
-				}
-			}
-
-			if i < len(s)-1 {
-				treeIndex += 1
-				continue
-			}
-		}
-
 		n := &node{}
+
+		if node := m.findNode(treeIndex, edge); node != nil {
+			n = node
+		}
 
 		if edge == colon {
 			p := []byte{}
