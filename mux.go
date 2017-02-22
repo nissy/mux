@@ -166,7 +166,7 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 		return
 	}
 
-	number := 1
+	number := 0
 	parent := m.tree[0]
 
 	for i := 0; i < len(s); i++ {
@@ -176,7 +176,7 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 			number: number,
 		}
 
-		if n, _ := parent.child[edge]; n != nil {
+		if n := parent.findChild(edge); n != nil {
 			child = n
 		}
 
@@ -210,16 +210,16 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 		}
 
 		if _, ok := parent.child[edge]; ok {
-			number += 1
 			parent = child
+			number += 1
 			continue
 		}
 
-		if number < len(m.tree) {
+		if number < len(m.tree)-1 {
 			number = len(m.tree)
 		}
 
-		// 兄弟がいない
+		// Not have brother
 		if len(parent.child) == 0 {
 			parent.child = make(map[byte]*node)
 		}
@@ -252,12 +252,8 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 	}
 
 	ctx := &rCtx{}
-	//var treeIndex int
-
 	parent := m.tree[0]
-
-	var route []*node
-	route = append(route, parent)
+	route := []int{parent.number}
 
 	for i := 0; i < len(s); i++ {
 		edge := s[i]
@@ -271,7 +267,7 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 				}
 			}
 
-			route = append(route, child)
+			route = append(route, child.number)
 			parent = child
 			continue
 		}
@@ -312,9 +308,51 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 				}
 			}
 
-			route = append(route, child)
+			route = append(route, child.number)
 			parent = child
 			continue
+		}
+
+		//BACKTRACK
+		if len(route) > 2 {
+			if n := m.tree[route[len(route)-2]].findChild(colon); n != nil {
+				p := []byte{}
+
+				for ; i < len(s); i++ {
+					if s[i] == slash {
+						i -= 1
+						break
+					}
+
+					p = append(p, s[i])
+				}
+
+				ctx.params.Set(n.param, string(p))
+				child = n
+			}
+
+			if n := m.tree[route[len(route)-2]].findChild(wildcard); n != nil {
+				for ; i < len(s); i++ {
+					if s[i] == slash {
+						i -= 1
+						break
+					}
+				}
+
+				child = n
+			}
+
+			if child != nil {
+				if i >= len(s)-1 {
+					if child.handlerFunc != nil {
+						return child.handlerFunc, ctx
+					}
+				}
+
+				route = route[0 : len(route)-2]
+				parent = child
+				continue
+			}
 		}
 
 		break
