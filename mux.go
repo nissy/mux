@@ -3,6 +3,8 @@ package mux
 import (
 	"context"
 	"net/http"
+
+	"github.com/k0kubun/pp"
 )
 
 const (
@@ -30,6 +32,7 @@ type (
 	}
 
 	node struct {
+		number      int
 		child       map[byte]*node
 		handlerFunc http.HandlerFunc //end is handlerFunc != nil
 		param       string
@@ -48,9 +51,19 @@ type (
 )
 
 func NewMux() *Mux {
-	return &Mux{
+	m := &Mux{
 		static:   make(map[string]http.HandlerFunc),
 		NotFound: http.NotFound,
+	}
+
+	m.tree = append(m.tree, newNode(0))
+	return m
+}
+
+func newNode(number int) *node {
+	return &node{
+		number: number,
+		child:  make(map[byte]*node),
 	}
 }
 
@@ -119,30 +132,6 @@ func (m *Mux) Get(pattern string, handlerFunc http.HandlerFunc) {
 	m.Entry(GET, pattern, handlerFunc)
 }
 
-func (m *Mux) Post(pattern string, handlerFunc http.HandlerFunc) {
-	m.Entry(POST, pattern, handlerFunc)
-}
-
-func (m *Mux) Put(pattern string, handlerFunc http.HandlerFunc) {
-	m.Entry(PUT, pattern, handlerFunc)
-}
-
-func (m *Mux) Delete(pattern string, handlerFunc http.HandlerFunc) {
-	m.Entry(DELETE, pattern, handlerFunc)
-}
-
-func (m *Mux) Head(pattern string, handlerFunc http.HandlerFunc) {
-	m.Entry(HEAD, pattern, handlerFunc)
-}
-
-func (m *Mux) Options(pattern string, handlerFunc http.HandlerFunc) {
-	m.Entry(OPTIONS, pattern, handlerFunc)
-}
-
-func (m *Mux) Patch(pattern string, handlerFunc http.HandlerFunc) {
-	m.Entry(PATCH, pattern, handlerFunc)
-}
-
 func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 	if pattern[0] != slash {
 		panic("There is no leading slash")
@@ -155,21 +144,18 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 		return
 	}
 
-	var treeIndex int
+	number := 1
+	parent := m.tree[0]
 
 	for i := 0; i < len(s); i++ {
 		edge := s[i]
 
-		if treeIndex == len(m.tree) {
-			m.tree = append(m.tree, &node{
-				child: make(map[byte]*node),
-			})
+		child := &node{
+			number: number,
 		}
 
-		n := &node{}
-
-		if node := m.findNode(treeIndex, edge); node != nil {
-			n = node
+		if n, _ := parent.child[edge]; n != nil {
+			child = n
 		}
 
 		if edge == colon {
@@ -185,7 +171,7 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 				p = append(p, s[i])
 			}
 
-			n.param = string(p)
+			child.param = string(p)
 		}
 
 		if edge == wildcard {
@@ -198,11 +184,28 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 		}
 
 		if i >= len(s)-1 {
-			n.handlerFunc = handlerFunc
+			child.handlerFunc = handlerFunc
 		}
 
-		m.tree[treeIndex].child[edge] = n
-		treeIndex += 1
+		if _, ok := parent.child[edge]; ok {
+			number += 1
+			parent = child
+			continue
+		}
+
+		if number < len(m.tree) {
+			number = len(m.tree)
+		}
+
+		parent.child = make(map[byte]*node)
+
+		//pp.Println(number, string(edge))
+
+		number += 1
+		child.number = number
+		m.tree = append(m.tree, child)
+		parent.child[edge] = child
+		parent = child
 	}
 }
 
@@ -306,6 +309,9 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 }
 
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
+	pp.Println(m.tree)
+
 	if fn, ctx := m.lookup(r); fn != nil {
 		if ctx != nil {
 			fn.ServeHTTP(w, r.WithContext(context.WithValue(
