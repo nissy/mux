@@ -29,9 +29,13 @@ func main() {
 	//	w.Write([]byte("/a/b/:id/d | Param id is " + mux.URLParam(r, "id")))
 	//})
 
-	//m.Get("/a/b/:id/d", func(w http.ResponseWriter, r *http.Request) {
-	//	w.Write([]byte("/a/b/:id/d | Param id is " + mux.URLParam(r, "id")))
-	//})
+	m.Get("/a/:id/a", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("a"))
+	})
+
+	m.Get("/a/:id/:id2", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("b"))
+	})
 
 	m.Get("/a/:id", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("/a/:id | Param id is " + mux.URLParam(r, "id")))

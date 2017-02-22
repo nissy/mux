@@ -3,8 +3,6 @@ package mux
 import (
 	"context"
 	"net/http"
-
-	"github.com/k0kubun/pp"
 )
 
 const (
@@ -132,6 +130,30 @@ func (m *Mux) Get(pattern string, handlerFunc http.HandlerFunc) {
 	m.Entry(GET, pattern, handlerFunc)
 }
 
+func (m *Mux) Post(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(POST, pattern, handlerFunc)
+}
+
+func (m *Mux) Put(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(PUT, pattern, handlerFunc)
+}
+
+func (m *Mux) Delete(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(DELETE, pattern, handlerFunc)
+}
+
+func (m *Mux) Head(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(HEAD, pattern, handlerFunc)
+}
+
+func (m *Mux) Options(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(OPTIONS, pattern, handlerFunc)
+}
+
+func (m *Mux) Patch(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(PATCH, pattern, handlerFunc)
+}
+
 func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 	if pattern[0] != slash {
 		panic("There is no leading slash")
@@ -197,9 +219,10 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 			number = len(m.tree)
 		}
 
-		parent.child = make(map[byte]*node)
-
-		//pp.Println(number, string(edge))
+		// 兄弟がいない
+		if len(parent.child) == 0 {
+			parent.child = make(map[byte]*node)
+		}
 
 		number += 1
 		child.number = number
@@ -207,6 +230,14 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 		parent.child[edge] = child
 		parent = child
 	}
+}
+
+func (n *node) findChild(edge byte) *node {
+	if n, ok := n.child[edge]; ok {
+		return n
+	}
+
+	return nil
 }
 
 func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
@@ -221,45 +252,32 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 	}
 
 	ctx := &rCtx{}
-	var treeIndex int
+	//var treeIndex int
+
+	parent := m.tree[0]
+
+	var route []*node
+	route = append(route, parent)
 
 	for i := 0; i < len(s); i++ {
-		if treeIndex > len(m.tree)-1 {
-			break
-		}
-
 		edge := s[i]
 
-		if n := m.findNode(treeIndex, edge); n != nil {
+		child := parent.findChild(edge)
+
+		if child != nil {
 			if i == len(s)-1 {
-				if n.handlerFunc != nil {
-					return n.handlerFunc, ctx
-				}
-
-				// BACKTRACK
-				if treeIndex > 0 {
-					if n := m.findNode(treeIndex, colon); n != nil {
-						ctx.params.Set(n.param, string(s[i]))
-
-						if n.handlerFunc != nil {
-							return n.handlerFunc, ctx
-						}
-					}
-
-					if n := m.findNode(treeIndex, wildcard); n != nil {
-						if n.handlerFunc != nil {
-							return n.handlerFunc, ctx
-						}
-					}
+				if child.handlerFunc != nil {
+					return child.handlerFunc, ctx
 				}
 			}
 
-			treeIndex += 1
+			route = append(route, child)
+			parent = child
 			continue
 		}
 
 		// PARAM
-		if n := m.findNodeBack(treeIndex, colon); n != nil {
+		if n := parent.findChild(colon); n != nil {
 			p := []byte{}
 
 			for ; i < len(s); i++ {
@@ -272,19 +290,11 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 			}
 
 			ctx.params.Set(n.param, string(p))
-
-			if i >= len(s)-1 {
-				if n.handlerFunc != nil {
-					return n.handlerFunc, ctx
-				}
-			}
-
-			treeIndex += 1
-			continue
+			child = n
 		}
 
 		// WILDCARD
-		if n := m.findNodeBack(treeIndex, wildcard); n != nil {
+		if n := parent.findChild(wildcard); n != nil {
 			for ; i < len(s); i++ {
 				if s[i] == slash {
 					i -= 1
@@ -292,13 +302,18 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 				}
 			}
 
+			child = n
+		}
+
+		if child != nil {
 			if i >= len(s)-1 {
-				if n.handlerFunc != nil {
-					return n.handlerFunc, ctx
+				if child.handlerFunc != nil {
+					return child.handlerFunc, ctx
 				}
 			}
 
-			treeIndex += 1
+			route = append(route, child)
+			parent = child
 			continue
 		}
 
@@ -309,9 +324,6 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 }
 
 func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-
-	pp.Println(m.tree)
-
 	if fn, ctx := m.lookup(r); fn != nil {
 		if ctx != nil {
 			fn.ServeHTTP(w, r.WithContext(context.WithValue(
