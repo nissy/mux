@@ -211,12 +211,13 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 
 		if _, ok := parent.child[edge]; ok {
 			parent = child
-			number += 1
 			continue
 		}
 
 		if number < len(m.tree)-1 {
 			number = len(m.tree)
+		} else {
+			number += 1
 		}
 
 		// Not have brother
@@ -224,7 +225,6 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 			parent.child = make(map[byte]*node)
 		}
 
-		number += 1
 		child.number = number
 		m.tree = append(m.tree, child)
 		parent.child[edge] = child
@@ -317,6 +317,7 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 		if len(route) > 2 {
 			if n := m.tree[route[len(route)-2]].findChild(colon); n != nil {
 				p := []byte{}
+				i -= 1
 
 				for ; i < len(s); i++ {
 					if s[i] == slash {
@@ -350,6 +351,7 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 				}
 
 				route = route[0 : len(route)-2]
+				route = append(route, child.number)
 				parent = child
 				continue
 			}
