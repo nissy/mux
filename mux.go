@@ -65,25 +65,9 @@ func newNode(number int) *node {
 	}
 }
 
-func (m *Mux) findNode(index int, edge byte) *node {
-	if len(m.tree) >= index {
-		if n, ok := m.tree[index].child[edge]; ok {
-			return n
-		}
-	}
-
-	return nil
-}
-
-func (m *Mux) findNodeBack(index int, edge byte) *node {
-	if n := m.findNode(index, edge); n != nil {
+func (n *node) findChild(edge byte) *node {
+	if n, ok := n.child[edge]; ok {
 		return n
-	}
-
-	if index > 0 {
-		if n := m.findNode(index-1, edge); n != nil {
-			return n
-		}
 	}
 
 	return nil
@@ -232,14 +216,6 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 	}
 }
 
-func (n *node) findChild(edge byte) *node {
-	if n, ok := n.child[edge]; ok {
-		return n
-	}
-
-	return nil
-}
-
 func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 	s := r.Method + r.URL.Path
 
@@ -257,7 +233,6 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 
 	for i := 0; i < len(s); i++ {
 		edge := s[i]
-
 		child := parent.findChild(edge)
 
 		if child != nil {
