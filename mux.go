@@ -19,9 +19,12 @@ const (
 )
 
 var (
-	colon    = byte(':')
-	slash    = byte('/')
-	wildcard = byte('*')
+	colon     = ':'
+	slash     = '/'
+	wildcard  = '*'
+	bColon    = byte(colon)
+	bSlash    = byte(slash)
+	bWildcard = byte(wildcard)
 )
 
 type (
@@ -37,7 +40,7 @@ type (
 
 	node struct {
 		number      int
-		child       map[byte]*node
+		child       map[rune]*node
 		handlerFunc http.HandlerFunc //end is handlerFunc != nil
 		param       string
 	}
@@ -103,11 +106,11 @@ func (r *Router) enter(method string) *mux {
 func newNode(number int) *node {
 	return &node{
 		number: number,
-		child:  make(map[byte]*node),
+		child:  make(map[rune]*node),
 	}
 }
 
-func (n *node) findChild(edge byte) *node {
+func (n *node) findChild(edge rune) *node {
 	if n, ok := n.child[edge]; ok {
 		return n
 	}
@@ -144,7 +147,7 @@ func URLParam(r *http.Request, key string) string {
 
 func isStaticPattern(pattern string) bool {
 	for i := 0; i < len(pattern); i++ {
-		if pattern[i] == colon || pattern[i] == wildcard {
+		if pattern[i] == bColon || pattern[i] == bWildcard {
 			return false
 		}
 	}
@@ -189,7 +192,7 @@ func (r *Router) Trace(pattern string, handlerFunc http.HandlerFunc) {
 }
 
 func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
-	if pattern[0] != slash {
+	if pattern[0] != bSlash {
 		panic("There is no leading slash")
 	}
 
@@ -202,7 +205,7 @@ func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
 	parent := m.tree[0]
 
 	for i := 0; i < len(pattern); i++ {
-		edge := pattern[i]
+		edge := rune(pattern[i])
 
 		child := &node{
 			number: number,
@@ -218,7 +221,7 @@ func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
 			ei = i
 
 			for ; i < len(pattern); i++ {
-				if pattern[i] == slash {
+				if pattern[i] == bSlash {
 					i -= 1
 					break
 				}
@@ -231,7 +234,7 @@ func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
 
 		if edge == wildcard {
 			for ; i < len(pattern); i++ {
-				if pattern[i] == slash {
+				if pattern[i] == bSlash {
 					i -= 1
 					break
 				}
@@ -255,7 +258,7 @@ func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
 
 		// Not have brother
 		if len(parent.child) == 0 {
-			parent.child = make(map[byte]*node)
+			parent.child = make(map[rune]*node)
 		}
 
 		child.number = number
@@ -283,7 +286,7 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 	ctx := &rCtx{}
 
 	for i := 0; i < len(s); i++ {
-		child := parent.findChild(s[i])
+		child := parent.findChild(rune(s[i]))
 
 		if child != nil {
 			if i == len(s)-1 {
@@ -304,7 +307,7 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 			ei = i
 
 			for ; i < len(s); i++ {
-				if s[i] == slash {
+				if s[i] == bSlash {
 					i -= 1
 					break
 				}
@@ -317,7 +320,7 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 
 		} else if n := parent.findChild(wildcard); n != nil {
 			for ; i < len(s); i++ {
-				if s[i] == slash {
+				if s[i] == bSlash {
 					i -= 1
 					break
 				}
@@ -347,7 +350,7 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 				ei = i
 
 				for ; i < len(s); i++ {
-					if s[i] == slash {
+					if s[i] == bSlash {
 						i -= 1
 						break
 					}
@@ -360,7 +363,7 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 
 			} else if n := m.tree[route[1]].findChild(wildcard); n != nil {
 				for ; i < len(s); i++ {
-					if s[i] == slash {
+					if s[i] == bSlash {
 						i -= 1
 						break
 					}
