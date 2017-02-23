@@ -34,20 +34,20 @@ func main() {
 ### Benchmark
 
 ```
-Param            1000000          1159 ns/op         512 B/op         10 allocs/op
-Param5            500000          2721 ns/op        1152 B/op         22 allocs/op
-Param20           200000          8320 ns/op        3696 B/op         56 allocs/op
-ParamWrite       1000000          1284 ns/op         528 B/op         11 allocs/op
-GithubStatic    30000000          39.3 ns/op           0 B/op          0 allocs/op
-GithubParam       500000          2565 ns/op        1024 B/op         17 allocs/op
-GithubAll           3000        509263 ns/op      155584 B/op       2479 allocs/op
-GPlusStatic     50000000          28.6 ns/op           0 B/op          0 allocs/op
-GPlusParam       1000000          1727 ns/op         712 B/op         13 allocs/op
-GPlus2Params      500000          3143 ns/op        1072 B/op         18 allocs/op
-GPlusAll           50000         27732 ns/op        9448 B/op        152 allocs/op
-ParseStatic     50000000          31.8 ns/op           0 B/op          0 allocs/op
-ParseParam       1000000          1660 ns/op         640 B/op         11 allocs/op
-Parse2Params     1000000          2208 ns/op         744 B/op         15 allocs/op
-ParseAll           50000         33771 ns/op       11704 B/op        207 allocs/op
-StaticAll         200000          7837 ns/op           0 B/op          0 allocs/op
+Param            1000000          1033 ns/op         400 B/op          7 allocs/op
+Param5           1000000          2352 ns/op         912 B/op         18 allocs/op
+Param20           200000          7333 ns/op        2688 B/op         50 allocs/op
+ParamWrite       1000000          1150 ns/op         416 B/op          8 allocs/op
+GithubStatic    30000000          42.2 ns/op           0 B/op          0 allocs/op
+GithubParam      1000000          1982 ns/op         528 B/op         12 allocs/op
+GithubAll           5000        369240 ns/op       83888 B/op       1691 allocs/op
+GPlusStatic     50000000          25.3 ns/op           0 B/op          0 allocs/op
+GPlusParam       1000000          1238 ns/op         472 B/op          9 allocs/op
+GPlus2Params     1000000          2027 ns/op         576 B/op         13 allocs/op
+GPlusAll          100000         19739 ns/op        5016 B/op        101 allocs/op
+ParseStatic     50000000          31.0 ns/op           0 B/op          0 allocs/op
+ParseParam       1000000          1135 ns/op         400 B/op          7 allocs/op
+Parse2Params     1000000          1645 ns/op         504 B/op         11 allocs/op
+ParseAll           50000         24304 ns/op        7096 B/op        140 allocs/op
+StaticAll         200000          8317 ns/op           0 B/op          0 allocs/op
 ```

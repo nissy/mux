@@ -29,6 +29,5 @@ func main() {
 		w.Write([]byte("/a/:id/:name | Param id is " + mux.URLParam(r, "id") + " / " + mux.URLParam(r, "name")))
 	})
 
-
 	http.ListenAndServe(":8080", m)
 }

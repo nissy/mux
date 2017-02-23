@@ -26,7 +26,7 @@ var (
 
 type (
 	Router struct {
-		mux      []*mux
+		mux      [9]*mux
 		NotFound http.HandlerFunc
 	}
 
@@ -56,12 +56,11 @@ type (
 
 func New() *Router {
 	r := &Router{
-		mux:      make([]*mux, 0, 9),
 		NotFound: http.NotFound,
 	}
 
 	for i := 0; i < 9; i++ {
-		r.mux = append(r.mux, newMux())
+		r.mux[i] = newMux()
 	}
 
 	return r
@@ -76,7 +75,7 @@ func newMux() *mux {
 	return m
 }
 
-func (r *Router) findMux(method string) *mux {
+func (r *Router) enter(method string) *mux {
 	switch method {
 	case GET:
 		return r.mux[0]
@@ -154,39 +153,39 @@ func isStaticPattern(pattern string) bool {
 }
 
 func (r *Router) Get(pattern string, handlerFunc http.HandlerFunc) {
-	r.findMux(GET).handle(pattern, handlerFunc)
+	r.enter(GET).handle(pattern, handlerFunc)
 }
 
 func (r *Router) Post(pattern string, handlerFunc http.HandlerFunc) {
-	r.findMux(POST).handle(pattern, handlerFunc)
+	r.enter(POST).handle(pattern, handlerFunc)
 }
 
 func (r *Router) Put(pattern string, handlerFunc http.HandlerFunc) {
-	r.findMux(PUT).handle(pattern, handlerFunc)
+	r.enter(PUT).handle(pattern, handlerFunc)
 }
 
 func (r *Router) Delete(pattern string, handlerFunc http.HandlerFunc) {
-	r.findMux(DELETE).handle(pattern, handlerFunc)
+	r.enter(DELETE).handle(pattern, handlerFunc)
 }
 
 func (r *Router) Head(pattern string, handlerFunc http.HandlerFunc) {
-	r.findMux(HEAD).handle(pattern, handlerFunc)
+	r.enter(HEAD).handle(pattern, handlerFunc)
 }
 
 func (r *Router) Options(pattern string, handlerFunc http.HandlerFunc) {
-	r.findMux(OPTIONS).handle(pattern, handlerFunc)
+	r.enter(OPTIONS).handle(pattern, handlerFunc)
 }
 
 func (r *Router) Patch(pattern string, handlerFunc http.HandlerFunc) {
-	r.findMux(PATCH).handle(pattern, handlerFunc)
+	r.enter(PATCH).handle(pattern, handlerFunc)
 }
 
 func (r *Router) Connect(pattern string, handlerFunc http.HandlerFunc) {
-	r.findMux(CONNECT).handle(pattern, handlerFunc)
+	r.enter(CONNECT).handle(pattern, handlerFunc)
 }
 
 func (r *Router) Trace(pattern string, handlerFunc http.HandlerFunc) {
-	r.findMux(TRACE).handle(pattern, handlerFunc)
+	r.enter(TRACE).handle(pattern, handlerFunc)
 }
 
 func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
@@ -278,7 +277,8 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 
 	ctx := &rCtx{}
 	parent := m.tree[0]
-	route := []int{parent.number}
+
+	var route [2]int
 
 	for i := 0; i < len(s); i++ {
 		edge := s[i]
@@ -291,7 +291,8 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 				}
 			}
 
-			route = append(route, child.number)
+			route[1] = route[0]
+			route[0] = child.number
 			parent = child
 			continue
 		}
@@ -332,14 +333,15 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 				}
 			}
 
-			route = append(route, child.number)
+			route[1] = route[0]
+			route[0] = child.number
 			parent = child
 			continue
 		}
 
 		//BACKTRACK
-		if len(route) > 2 {
-			if n := m.tree[route[len(route)-2]].findChild(colon); n != nil {
+		if route[1] > 0 {
+			if n := m.tree[route[1]].findChild(colon); n != nil {
 				p := []byte{}
 				i -= 1
 
@@ -356,7 +358,7 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 				child = n
 			}
 
-			if n := m.tree[route[len(route)-2]].findChild(wildcard); n != nil {
+			if n := m.tree[route[1]].findChild(wildcard); n != nil {
 				for ; i < len(s); i++ {
 					if s[i] == slash {
 						i -= 1
@@ -374,8 +376,8 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 					}
 				}
 
-				route = route[0 : len(route)-2]
-				route = append(route, child.number)
+				route[1] = route[0]
+				route[0] = child.number
 				parent = child
 				continue
 			}
@@ -388,7 +390,7 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 }
 
 func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if fn, ctx := rt.findMux(r.Method).lookup(r); fn != nil {
+	if fn, ctx := rt.enter(r.Method).lookup(r); fn != nil {
 		if ctx != nil {
 			fn.ServeHTTP(w, r.WithContext(context.WithValue(
 				r.Context(), rCtxKey, ctx),
