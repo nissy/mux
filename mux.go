@@ -198,7 +198,7 @@ func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
 		return
 	}
 
-	number := 0
+	var number, si, ei int
 	parent := m.tree[0]
 
 	for i := 0; i < len(pattern); i++ {
@@ -213,8 +213,9 @@ func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
 		}
 
 		if edge == colon {
-			p := []byte{}
 			i += 1
+			si = i
+			ei = i
 
 			for ; i < len(pattern); i++ {
 				if pattern[i] == slash {
@@ -222,10 +223,10 @@ func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
 					break
 				}
 
-				p = append(p, pattern[i])
+				ei++
 			}
 
-			child.param = string(p)
+			child.param = pattern[si:ei]
 		}
 
 		if edge == wildcard {
@@ -282,8 +283,7 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 	ctx := &rCtx{}
 
 	for i := 0; i < len(s); i++ {
-		edge := s[i]
-		child := parent.findChild(edge)
+		child := parent.findChild(s[i])
 
 		if child != nil {
 			if i == len(s)-1 {
