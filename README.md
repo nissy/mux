@@ -33,6 +33,8 @@ func main() {
 
 ### Benchmark
 
+https://github.com/ngc224/go-http-routing-benchmark
+
 ```
 Param            2000000           686 ns/op         384 B/op          5 allocs/op
 Param5           1000000          1470 ns/op         832 B/op          8 allocs/op
