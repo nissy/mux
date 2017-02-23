@@ -275,10 +275,11 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 		return nil, nil
 	}
 
-	ctx := &rCtx{}
-	parent := m.tree[0]
-
 	var route [2]int
+	var si, ei int
+
+	parent := m.tree[0]
+	ctx := &rCtx{}
 
 	for i := 0; i < len(s); i++ {
 		edge := s[i]
@@ -299,7 +300,8 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 
 		//PARAM
 		if n := parent.findChild(colon); n != nil {
-			p := []byte{}
+			si = i
+			ei = i
 
 			for ; i < len(s); i++ {
 				if s[i] == slash {
@@ -307,10 +309,10 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 					break
 				}
 
-				p = append(p, s[i])
+				ei++
 			}
 
-			ctx.params.Set(n.param, string(p))
+			ctx.params.Set(n.param, s[si:ei])
 			child = n
 
 		} else if n := parent.findChild(wildcard); n != nil {
@@ -340,8 +342,9 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 		//BACKTRACK PARAM
 		if route[1] > 0 {
 			if n := m.tree[route[1]].findChild(colon); n != nil {
-				p := []byte{}
 				i -= 1
+				si = i
+				ei = i
 
 				for ; i < len(s); i++ {
 					if s[i] == slash {
@@ -349,10 +352,10 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 						break
 					}
 
-					p = append(p, s[i])
+					ei++
 				}
 
-				ctx.params.Set(n.param, string(p))
+				ctx.params.Set(n.param, s[si:ei])
 				child = n
 
 			} else if n := m.tree[route[1]].findChild(wildcard); n != nil {
