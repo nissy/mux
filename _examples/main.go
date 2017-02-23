@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	m := mux.NewMux()
+	m := mux.New()
 
 	//m.Get("/", func(w http.ResponseWriter, r *http.Request) {
 	//	w.Write([]byte("/ | static"))

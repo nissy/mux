@@ -13,6 +13,8 @@ const (
 	HEAD    = "HEAD"
 	OPTIONS = "OPTIONS"
 	PATCH   = "PATCH"
+	CONNECT = "CONNECT"
+	TRACE   = "TRACE"
 	rCtxKey = "mux"
 )
 
@@ -23,10 +25,14 @@ var (
 )
 
 type (
-	Mux struct {
-		tree     []*node
-		static   map[string]http.HandlerFunc
+	Router struct {
+		mux      []*mux
 		NotFound http.HandlerFunc
+	}
+
+	mux struct {
+		tree   []*node
+		static map[string]http.HandlerFunc
 	}
 
 	node struct {
@@ -48,14 +54,51 @@ type (
 	}
 )
 
-func NewMux() *Mux {
-	m := &Mux{
-		static:   make(map[string]http.HandlerFunc),
+func New() *Router {
+	r := &Router{
+		mux:      make([]*mux, 0, 9),
 		NotFound: http.NotFound,
+	}
+
+	for i := 0; i < 9; i++ {
+		r.mux = append(r.mux, newMux())
+	}
+
+	return r
+}
+
+func newMux() *mux {
+	m := &mux{
+		static: make(map[string]http.HandlerFunc),
 	}
 
 	m.tree = append(m.tree, newNode(0))
 	return m
+}
+
+func (r *Router) findMux(method string) *mux {
+	switch method {
+	case GET:
+		return r.mux[0]
+	case POST:
+		return r.mux[1]
+	case PUT:
+		return r.mux[2]
+	case DELETE:
+		return r.mux[3]
+	case HEAD:
+		return r.mux[4]
+	case OPTIONS:
+		return r.mux[5]
+	case PATCH:
+		return r.mux[6]
+	case CONNECT:
+		return r.mux[7]
+	case TRACE:
+		return r.mux[8]
+	}
+
+	return nil
 }
 
 func newNode(number int) *node {
@@ -110,51 +153,57 @@ func isStaticPattern(pattern string) bool {
 	return true
 }
 
-func (m *Mux) Get(pattern string, handlerFunc http.HandlerFunc) {
-	m.Entry(GET, pattern, handlerFunc)
+func (r *Router) Get(pattern string, handlerFunc http.HandlerFunc) {
+	r.findMux(GET).handle(pattern, handlerFunc)
 }
 
-func (m *Mux) Post(pattern string, handlerFunc http.HandlerFunc) {
-	m.Entry(POST, pattern, handlerFunc)
+func (r *Router) Post(pattern string, handlerFunc http.HandlerFunc) {
+	r.findMux(POST).handle(pattern, handlerFunc)
 }
 
-func (m *Mux) Put(pattern string, handlerFunc http.HandlerFunc) {
-	m.Entry(PUT, pattern, handlerFunc)
+func (r *Router) Put(pattern string, handlerFunc http.HandlerFunc) {
+	r.findMux(PUT).handle(pattern, handlerFunc)
 }
 
-func (m *Mux) Delete(pattern string, handlerFunc http.HandlerFunc) {
-	m.Entry(DELETE, pattern, handlerFunc)
+func (r *Router) Delete(pattern string, handlerFunc http.HandlerFunc) {
+	r.findMux(DELETE).handle(pattern, handlerFunc)
 }
 
-func (m *Mux) Head(pattern string, handlerFunc http.HandlerFunc) {
-	m.Entry(HEAD, pattern, handlerFunc)
+func (r *Router) Head(pattern string, handlerFunc http.HandlerFunc) {
+	r.findMux(HEAD).handle(pattern, handlerFunc)
 }
 
-func (m *Mux) Options(pattern string, handlerFunc http.HandlerFunc) {
-	m.Entry(OPTIONS, pattern, handlerFunc)
+func (r *Router) Options(pattern string, handlerFunc http.HandlerFunc) {
+	r.findMux(OPTIONS).handle(pattern, handlerFunc)
 }
 
-func (m *Mux) Patch(pattern string, handlerFunc http.HandlerFunc) {
-	m.Entry(PATCH, pattern, handlerFunc)
+func (r *Router) Patch(pattern string, handlerFunc http.HandlerFunc) {
+	r.findMux(PATCH).handle(pattern, handlerFunc)
 }
 
-func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
+func (r *Router) Connect(pattern string, handlerFunc http.HandlerFunc) {
+	r.findMux(CONNECT).handle(pattern, handlerFunc)
+}
+
+func (r *Router) Trace(pattern string, handlerFunc http.HandlerFunc) {
+	r.findMux(TRACE).handle(pattern, handlerFunc)
+}
+
+func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
 	if pattern[0] != slash {
 		panic("There is no leading slash")
 	}
 
-	s := method + pattern
-
 	if isStaticPattern(pattern) {
-		m.static[s] = handlerFunc
+		m.static[pattern] = handlerFunc
 		return
 	}
 
 	number := 0
 	parent := m.tree[0]
 
-	for i := 0; i < len(s); i++ {
-		edge := s[i]
+	for i := 0; i < len(pattern); i++ {
+		edge := pattern[i]
 
 		child := &node{
 			number: number,
@@ -168,28 +217,28 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 			p := []byte{}
 			i += 1
 
-			for ; i < len(s); i++ {
-				if s[i] == slash {
+			for ; i < len(pattern); i++ {
+				if pattern[i] == slash {
 					i -= 1
 					break
 				}
 
-				p = append(p, s[i])
+				p = append(p, pattern[i])
 			}
 
 			child.param = string(p)
 		}
 
 		if edge == wildcard {
-			for ; i < len(s); i++ {
-				if s[i] == slash {
+			for ; i < len(pattern); i++ {
+				if pattern[i] == slash {
 					i -= 1
 					break
 				}
 			}
 		}
 
-		if i >= len(s)-1 {
+		if i >= len(pattern)-1 {
 			child.handlerFunc = handlerFunc
 		}
 
@@ -216,8 +265,8 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 	}
 }
 
-func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
-	s := r.Method + r.URL.Path
+func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
+	s := r.URL.Path
 
 	if fn, ok := m.static[s]; ok {
 		return fn, nil
@@ -338,8 +387,8 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 	return nil, nil
 }
 
-func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if fn, ctx := m.lookup(r); fn != nil {
+func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if fn, ctx := rt.findMux(r.Method).lookup(r); fn != nil {
 		if ctx != nil {
 			fn.ServeHTTP(w, r.WithContext(context.WithValue(
 				r.Context(), rCtxKey, ctx),
@@ -351,5 +400,5 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m.NotFound.ServeHTTP(w, r)
+	rt.NotFound.ServeHTTP(w, r)
 }
