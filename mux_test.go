@@ -8,10 +8,10 @@ import (
 )
 
 func setup() *httptest.Server {
-	mux := NewMux()
-	mux.Entry(GET, "/foo", foo)
-	mux.Entry(GET, "/bar", bar)
-	mux.Entry(GET, "/baz", baz)
+	mux := New()
+	mux.Get("/foo", foo)
+	mux.Get("/bar", bar)
+	mux.Get("/baz", baz)
 	return httptest.NewServer(mux)
 }
 
