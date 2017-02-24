@@ -109,14 +109,6 @@ func newNode(number int) *node {
 	}
 }
 
-func (n *node) findChild(edge string) *node {
-	if n, ok := n.child[edge]; ok {
-		return n
-	}
-
-	return nil
-}
-
 func (ps *params) Set(key, value string) {
 	*ps = append(*ps, param{
 		key:   key,
@@ -231,7 +223,7 @@ func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
 			number: number,
 		}
 
-		if n := parent.findChild(edge); n != nil {
+		if n := parent.child[edge]; n != nil {
 			child = n
 		}
 
@@ -269,7 +261,7 @@ func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
 func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 	s := r.URL.Path
 
-	if fn, ok := m.static[s]; ok {
+	if fn := m.static[s]; fn != nil {
 		return fn, nil
 	}
 
@@ -278,6 +270,7 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 	}
 
 	var si, ei, bsi, route int
+	var child *node
 
 	parent := m.tree[0]
 	ctx := &rCtx{}
@@ -299,9 +292,9 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 		}
 
 		edge := s[si:ei]
-		child := parent.findChild(edge)
 
-		if child != nil {
+		//STATIC
+		if child = parent.child[edge]; child != nil {
 			if i >= len(s)-1 {
 				if child.handlerFunc != nil {
 					return child.handlerFunc, ctx
@@ -314,11 +307,11 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 			continue
 		}
 
-		if n := parent.findChild(colon); n != nil {
-			ctx.params.Set(n.param, edge)
-			child = n
-		} else if n := parent.findChild(wildcard); n != nil {
-			child = n
+		//PARAM
+		if child = parent.child[colon]; child != nil {
+			ctx.params.Set(child.param, edge)
+		} else {
+			child = parent.child[wildcard]
 		}
 
 		if child != nil {
@@ -335,11 +328,10 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 		}
 
 		//BACKTRACK
-		if n := m.tree[route].findChild(colon); n != nil {
-			ctx.params.Set(n.param, s[bsi:si-1])
-			child = n
-		} else if n := m.tree[route].findChild(wildcard); n != nil {
-			child = n
+		if child = m.tree[route].child[colon]; child != nil {
+			ctx.params.Set(child.param, s[bsi:si-1])
+		} else {
+			child = m.tree[route].child[wildcard]
 		}
 
 		if child != nil {
