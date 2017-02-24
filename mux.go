@@ -39,11 +39,10 @@ type (
 	}
 
 	node struct {
-		number       int
-		child        map[rune]*node
-		handlerFunc  http.HandlerFunc
-		param        string
-		isParamChild bool
+		number      int
+		child       map[rune]*node
+		handlerFunc http.HandlerFunc
+		param       string
 	}
 
 	rCtx struct {
@@ -231,7 +230,6 @@ func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
 			}
 
 			child.param = pattern[si:ei]
-			parent.isParamChild = true
 		}
 
 		if edge == wildcard {
@@ -241,8 +239,6 @@ func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
 					break
 				}
 			}
-
-			parent.isParamChild = true
 		}
 
 		if i >= len(pattern)-1 {
@@ -305,33 +301,31 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 			continue
 		}
 
-		if parent.isParamChild {
-			if n := parent.findChild(colon); n != nil {
-				si = i
-				ei = i
+		if n := parent.findChild(colon); n != nil {
+			si = i
+			ei = i
 
-				for ; i < len(s); i++ {
-					if s[i] == bSlash {
-						i -= 1
-						break
-					}
-
-					ei++
+			for ; i < len(s); i++ {
+				if s[i] == bSlash {
+					i -= 1
+					break
 				}
 
-				ctx.params.Set(n.param, s[si:ei])
-				child = n
-
-			} else if n := parent.findChild(wildcard); n != nil {
-				for ; i < len(s); i++ {
-					if s[i] == bSlash {
-						i -= 1
-						break
-					}
-				}
-
-				child = n
+				ei++
 			}
+
+			ctx.params.Set(n.param, s[si:ei])
+			child = n
+
+		} else if n := parent.findChild(wildcard); n != nil {
+			for ; i < len(s); i++ {
+				if s[i] == bSlash {
+					i -= 1
+					break
+				}
+			}
+
+			child = n
 		}
 
 		if child != nil {
@@ -348,47 +342,45 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 		}
 
 		//BACKTRACK
-		if m.tree[route[1]].isParamChild {
-			if n := m.tree[route[1]].findChild(colon); n != nil {
-				i -= 1
-				si = i
-				ei = i
+		if n := m.tree[route[1]].findChild(colon); n != nil {
+			i -= 1
+			si = i
+			ei = i
 
-				for ; i < len(s); i++ {
-					if s[i] == bSlash {
-						i -= 1
-						break
-					}
-
-					ei++
+			for ; i < len(s); i++ {
+				if s[i] == bSlash {
+					i -= 1
+					break
 				}
 
-				ctx.params.Set(n.param, s[si:ei])
-				child = n
-
-			} else if n := m.tree[route[1]].findChild(wildcard); n != nil {
-				for ; i < len(s); i++ {
-					if s[i] == bSlash {
-						i -= 1
-						break
-					}
-				}
-
-				child = n
+				ei++
 			}
 
-			if child != nil {
-				if i >= len(s)-1 {
-					if child.handlerFunc != nil {
-						return child.handlerFunc, ctx
-					}
-				}
+			ctx.params.Set(n.param, s[si:ei])
+			child = n
 
-				route[1] = route[0]
-				route[0] = child.number
-				parent = child
-				continue
+		} else if n := m.tree[route[1]].findChild(wildcard); n != nil {
+			for ; i < len(s); i++ {
+				if s[i] == bSlash {
+					i -= 1
+					break
+				}
 			}
+
+			child = n
+		}
+
+		if child != nil {
+			if i >= len(s)-1 {
+				if child.handlerFunc != nil {
+					return child.handlerFunc, ctx
+				}
+			}
+
+			route[1] = route[0]
+			route[0] = child.number
+			parent = child
+			continue
 		}
 
 		break
