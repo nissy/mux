@@ -39,10 +39,11 @@ type (
 	}
 
 	node struct {
-		number      int
-		child       map[rune]*node
-		handlerFunc http.HandlerFunc //end is handlerFunc != nil
-		param       string
+		number       int
+		child        map[rune]*node
+		handlerFunc  http.HandlerFunc
+		param        string
+		isParamChild bool
 	}
 
 	rCtx struct {
@@ -230,6 +231,7 @@ func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
 			}
 
 			child.param = pattern[si:ei]
+			parent.isParamChild = true
 		}
 
 		if edge == wildcard {
@@ -239,6 +241,8 @@ func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
 					break
 				}
 			}
+
+			parent.isParamChild = true
 		}
 
 		if i >= len(pattern)-1 {
@@ -301,32 +305,33 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 			continue
 		}
 
-		//PARAM
-		if n := parent.findChild(colon); n != nil {
-			si = i
-			ei = i
+		if parent.isParamChild {
+			if n := parent.findChild(colon); n != nil {
+				si = i
+				ei = i
 
-			for ; i < len(s); i++ {
-				if s[i] == bSlash {
-					i -= 1
-					break
+				for ; i < len(s); i++ {
+					if s[i] == bSlash {
+						i -= 1
+						break
+					}
+
+					ei++
 				}
 
-				ei++
-			}
+				ctx.params.Set(n.param, s[si:ei])
+				child = n
 
-			ctx.params.Set(n.param, s[si:ei])
-			child = n
-
-		} else if n := parent.findChild(wildcard); n != nil {
-			for ; i < len(s); i++ {
-				if s[i] == bSlash {
-					i -= 1
-					break
+			} else if n := parent.findChild(wildcard); n != nil {
+				for ; i < len(s); i++ {
+					if s[i] == bSlash {
+						i -= 1
+						break
+					}
 				}
-			}
 
-			child = n
+				child = n
+			}
 		}
 
 		if child != nil {
@@ -342,8 +347,8 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 			continue
 		}
 
-		//BACKTRACK PARAM
-		if route[1] > 0 {
+		//BACKTRACK
+		if m.tree[route[1]].isParamChild {
 			if n := m.tree[route[1]].findChild(colon); n != nil {
 				i -= 1
 				si = i
