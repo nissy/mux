@@ -184,7 +184,7 @@ func (r *Router) Trace(pattern string, handlerFunc http.HandlerFunc) {
 
 func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
 	if pattern[0] != bSlash {
-		panic("There is no leading bSlash")
+		panic("There is no leading slash")
 	}
 
 	if isStaticPattern(pattern) {
@@ -204,6 +204,12 @@ func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
 		ei = i
 
 		for ; i < len(pattern); i++ {
+			if si < ei {
+				if pattern[i] == bColon || pattern[i] == bWildcard {
+					panic("Parameter are not first")
+				}
+			}
+
 			if pattern[i] == bSlash {
 				break
 			}
@@ -214,9 +220,12 @@ func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
 		edge := pattern[si:ei]
 		var param string
 
-		if edge[0] == bColon {
+		switch edge[0] {
+		case bColon:
 			param = edge[1:]
 			edge = colon
+		case bWildcard:
+			edge = wildcard
 		}
 
 		child := &node{
