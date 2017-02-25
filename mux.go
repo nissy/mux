@@ -29,7 +29,6 @@ var (
 type (
 	Mux struct {
 		tree     []*node
-		static   map[string]http.HandlerFunc
 		NotFound http.HandlerFunc
 	}
 
@@ -58,7 +57,6 @@ func New() *Mux {
 
 func NewMux() *Mux {
 	m := &Mux{
-		static:   make(map[string]http.HandlerFunc),
 		NotFound: http.NotFound,
 	}
 
@@ -71,6 +69,15 @@ func newNode(number int) *node {
 		number: number,
 		child:  make(map[string]*node),
 	}
+}
+
+func (n *node) newChild(child *node, edge string) *node {
+	if len(n.child) == 0 {
+		n.child = make(map[string]*node)
+	}
+
+	n.child[edge] = child
+	return child
 }
 
 func (ps *params) Set(key, value string) {
@@ -151,15 +158,28 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 		panic("There is no leading slash")
 	}
 
-	s := method + pattern
+	parent := m.tree[0].child[method]
 
-	if isStaticPattern(s) {
-		m.static[s] = handlerFunc
+	if parent == nil {
+		parent = m.tree[0]
+		child := newNode(len(m.tree))
+		m.tree = append(m.tree, child)
+		parent = parent.newChild(child, method)
+	}
+
+	if isStaticPattern(pattern) {
+		if _, ok := parent.child[pattern]; !ok {
+			child := newNode(len(m.tree))
+			child.handlerFunc = handlerFunc
+			m.tree = append(m.tree, child)
+			parent.newChild(child, pattern)
+		}
+
 		return
 	}
 
+	s := pattern
 	var number, si, ei int
-	parent := m.tree[0]
 
 	for i := 0; i < len(s); i++ {
 		if s[i] == bSlash {
@@ -221,34 +241,27 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 			number += 1
 		}
 
-		// Not have brother
-		if len(parent.child) == 0 {
-			parent.child = make(map[string]*node)
-		}
-
 		child.number = number
 		m.tree = append(m.tree, child)
-		parent.child[edge] = child
-		parent = child
+		parent = parent.newChild(child, edge)
 	}
 }
 
 func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
-	s := r.URL.Path
-
-	//TODO allo
-	if fn := m.static[r.Method+s]; fn != nil {
-		return fn, nil
-	}
-
 	if len(m.tree) < 2 {
 		return nil, nil
 	}
 
+	s := r.URL.Path
 	var parent, child *node
 
 	if parent = m.tree[0].child[r.Method]; parent == nil {
 		return nil, nil
+	}
+
+	//STATIC PATH
+	if n := parent.child[s]; n != nil {
+		return n.handlerFunc, nil
 	}
 
 	var si, ei, bsi int
