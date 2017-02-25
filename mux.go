@@ -77,31 +77,6 @@ func newMux() *mux {
 	return m
 }
 
-func (r *Router) enter(method string) *mux {
-	switch method {
-	case GET:
-		return r.mux[0]
-	case POST:
-		return r.mux[1]
-	case PUT:
-		return r.mux[2]
-	case DELETE:
-		return r.mux[3]
-	case HEAD:
-		return r.mux[4]
-	case OPTIONS:
-		return r.mux[5]
-	case PATCH:
-		return r.mux[6]
-	case CONNECT:
-		return r.mux[7]
-	case TRACE:
-		return r.mux[8]
-	}
-
-	return nil
-}
-
 func newNode(number int) *node {
 	return &node{
 		number: number,
@@ -144,6 +119,31 @@ func isStaticPattern(pattern string) bool {
 	}
 
 	return true
+}
+
+func (r *Router) enter(method string) *mux {
+	switch method {
+	case GET:
+		return r.mux[0]
+	case POST:
+		return r.mux[1]
+	case PUT:
+		return r.mux[2]
+	case DELETE:
+		return r.mux[3]
+	case HEAD:
+		return r.mux[4]
+	case OPTIONS:
+		return r.mux[5]
+	case PATCH:
+		return r.mux[6]
+	case CONNECT:
+		return r.mux[7]
+	case TRACE:
+		return r.mux[8]
+	}
+
+	return nil
 }
 
 func (r *Router) Get(pattern string, handlerFunc http.HandlerFunc) {
@@ -265,11 +265,11 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 		return fn, nil
 	}
 
-	if len(m.tree) == 0 {
+	if len(m.tree) < 2 {
 		return nil, nil
 	}
 
-	var si, ei, bsi, route int
+	var si, ei, bsi int
 	var child *node
 
 	parent := m.tree[0]
@@ -302,7 +302,6 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 			}
 
 			bsi = si
-			route = child.number
 			parent = child
 			continue
 		}
@@ -322,16 +321,15 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 			}
 
 			bsi = si
-			route = child.number
 			parent = child
 			continue
 		}
 
 		//BACKTRACK
-		if child = m.tree[route].child[colon]; child != nil {
+		if child = m.tree[parent.number].child[colon]; child != nil {
 			ctx.params.Set(child.param, s[bsi:si-1])
 		} else {
-			child = m.tree[route].child[wildcard]
+			child = m.tree[parent.number].child[wildcard]
 		}
 
 		if child != nil {
@@ -341,7 +339,6 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 				}
 			}
 
-			route = child.number
 			parent = child
 			continue
 		}
