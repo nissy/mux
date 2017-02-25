@@ -27,14 +27,10 @@ var (
 )
 
 type (
-	Router struct {
-		mux      [9]*mux
+	Mux struct {
+		tree     []*node
+		static   map[string]http.HandlerFunc
 		NotFound http.HandlerFunc
-	}
-
-	mux struct {
-		tree   []*node
-		static map[string]http.HandlerFunc
 	}
 
 	node struct {
@@ -56,21 +52,14 @@ type (
 	}
 )
 
-func New() *Router {
-	r := &Router{
-		NotFound: http.NotFound,
-	}
-
-	for i := 0; i < 9; i++ {
-		r.mux[i] = newMux()
-	}
-
-	return r
+func New() *Mux {
+	return NewMux()
 }
 
-func newMux() *mux {
-	m := &mux{
-		static: make(map[string]http.HandlerFunc),
+func NewMux() *Mux {
+	m := &Mux{
+		static:   make(map[string]http.HandlerFunc),
+		NotFound: http.NotFound,
 	}
 
 	m.tree = append(m.tree, newNode(0))
@@ -121,103 +110,80 @@ func isStaticPattern(pattern string) bool {
 	return true
 }
 
-func (r *Router) enter(method string) *mux {
-	switch method {
-	case GET:
-		return r.mux[0]
-	case POST:
-		return r.mux[1]
-	case PUT:
-		return r.mux[2]
-	case DELETE:
-		return r.mux[3]
-	case HEAD:
-		return r.mux[4]
-	case OPTIONS:
-		return r.mux[5]
-	case PATCH:
-		return r.mux[6]
-	case CONNECT:
-		return r.mux[7]
-	case TRACE:
-		return r.mux[8]
-	}
-
-	return nil
+func (m *Mux) Get(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(GET, pattern, handlerFunc)
 }
 
-func (r *Router) Get(pattern string, handlerFunc http.HandlerFunc) {
-	r.enter(GET).handle(pattern, handlerFunc)
+func (m *Mux) Post(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(POST, pattern, handlerFunc)
 }
 
-func (r *Router) Post(pattern string, handlerFunc http.HandlerFunc) {
-	r.enter(POST).handle(pattern, handlerFunc)
+func (m *Mux) Put(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(PUT, pattern, handlerFunc)
 }
 
-func (r *Router) Put(pattern string, handlerFunc http.HandlerFunc) {
-	r.enter(PUT).handle(pattern, handlerFunc)
+func (m *Mux) Delete(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(DELETE, pattern, handlerFunc)
 }
 
-func (r *Router) Delete(pattern string, handlerFunc http.HandlerFunc) {
-	r.enter(DELETE).handle(pattern, handlerFunc)
+func (m *Mux) Head(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(HEAD, pattern, handlerFunc)
 }
 
-func (r *Router) Head(pattern string, handlerFunc http.HandlerFunc) {
-	r.enter(HEAD).handle(pattern, handlerFunc)
+func (m *Mux) Options(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(OPTIONS, pattern, handlerFunc)
 }
 
-func (r *Router) Options(pattern string, handlerFunc http.HandlerFunc) {
-	r.enter(OPTIONS).handle(pattern, handlerFunc)
+func (m *Mux) Patch(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(PATCH, pattern, handlerFunc)
 }
 
-func (r *Router) Patch(pattern string, handlerFunc http.HandlerFunc) {
-	r.enter(PATCH).handle(pattern, handlerFunc)
+func (m *Mux) Connect(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(CONNECT, pattern, handlerFunc)
 }
 
-func (r *Router) Connect(pattern string, handlerFunc http.HandlerFunc) {
-	r.enter(CONNECT).handle(pattern, handlerFunc)
+func (m *Mux) Trace(pattern string, handlerFunc http.HandlerFunc) {
+	m.Entry(TRACE, pattern, handlerFunc)
 }
 
-func (r *Router) Trace(pattern string, handlerFunc http.HandlerFunc) {
-	r.enter(TRACE).handle(pattern, handlerFunc)
-}
-
-func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
+func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 	if pattern[0] != bSlash {
 		panic("There is no leading slash")
 	}
 
-	if isStaticPattern(pattern) {
-		m.static[pattern] = handlerFunc
+	s := method + pattern
+
+	if isStaticPattern(s) {
+		m.static[s] = handlerFunc
 		return
 	}
 
 	var number, si, ei int
 	parent := m.tree[0]
 
-	for i := 0; i < len(pattern); i++ {
-		if pattern[i] == bSlash {
+	for i := 0; i < len(s); i++ {
+		if s[i] == bSlash {
 			i += 1
 		}
 
 		si = i
 		ei = i
 
-		for ; i < len(pattern); i++ {
+		for ; i < len(s); i++ {
 			if si < ei {
-				if pattern[i] == bColon || pattern[i] == bWildcard {
+				if s[i] == bColon || s[i] == bWildcard {
 					panic("Parameter are not first")
 				}
 			}
 
-			if pattern[i] == bSlash {
+			if s[i] == bSlash {
 				break
 			}
 
 			ei++
 		}
 
-		edge := pattern[si:ei]
+		edge := s[si:ei]
 		var param string
 
 		switch edge[0] {
@@ -240,7 +206,7 @@ func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
 			child.param = param
 		}
 
-		if i >= len(pattern)-1 {
+		if i >= len(s)-1 {
 			child.handlerFunc = handlerFunc
 		}
 
@@ -267,10 +233,11 @@ func (m *mux) handle(pattern string, handlerFunc http.HandlerFunc) {
 	}
 }
 
-func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
+func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 	s := r.URL.Path
 
-	if fn := m.static[s]; fn != nil {
+	//TODO allo
+	if fn := m.static[r.Method+s]; fn != nil {
 		return fn, nil
 	}
 
@@ -278,10 +245,13 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 		return nil, nil
 	}
 
-	var si, ei, bsi int
-	var child *node
+	var parent, child *node
 
-	parent := m.tree[0]
+	if parent = m.tree[0].child[r.Method]; parent == nil {
+		return nil, nil
+	}
+
+	var si, ei, bsi int
 	ctx := &rCtx{}
 
 	for i := 0; i < len(s); i++ {
@@ -358,8 +328,8 @@ func (m *mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 	return nil, nil
 }
 
-func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if fn, ctx := rt.enter(r.Method).lookup(r); fn != nil {
+func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if fn, ctx := m.lookup(r); fn != nil {
 		if ctx != nil {
 			fn.ServeHTTP(w, r.WithContext(context.WithValue(
 				r.Context(), rCtxKey, ctx),
@@ -371,5 +341,5 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rt.NotFound.ServeHTTP(w, r)
+	m.NotFound.ServeHTTP(w, r)
 }
