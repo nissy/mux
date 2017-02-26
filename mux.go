@@ -178,32 +178,31 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 		return
 	}
 
-	s := pattern
 	var number, si, ei int
 
-	for i := 0; i < len(s); i++ {
-		if s[i] == bSlash {
+	for i := 0; i < len(pattern); i++ {
+		if pattern[i] == bSlash {
 			i += 1
 		}
 
 		si = i
 		ei = i
 
-		for ; i < len(s); i++ {
+		for ; i < len(pattern); i++ {
 			if si < ei {
-				if s[i] == bColon || s[i] == bWildcard {
+				if pattern[i] == bColon || pattern[i] == bWildcard {
 					panic("Parameter are not first")
 				}
 			}
 
-			if s[i] == bSlash {
+			if pattern[i] == bSlash {
 				break
 			}
 
 			ei++
 		}
 
-		edge := s[si:ei]
+		edge := pattern[si:ei]
 		var param string
 
 		switch edge[0] {
@@ -226,7 +225,7 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 			child.param = param
 		}
 
-		if i >= len(s)-1 {
+		if i >= len(pattern)-1 {
 			child.handlerFunc = handlerFunc
 		}
 
