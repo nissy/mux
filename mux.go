@@ -80,6 +80,24 @@ func (n *node) newChild(child *node, edge string) *node {
 	return child
 }
 
+func newCtx(s string) *rCtx {
+	var n uint
+
+	for i := 0; i < len(s); i++ {
+		if s[i] == bSlash {
+			n++
+		}
+	}
+
+	if n >= 255 {
+		n = 255
+	}
+
+	return &rCtx{
+		params: make([]param, 0, n),
+	}
+}
+
 func (ps *params) Set(key, value string) {
 	*ps = append(*ps, param{
 		key:   key,
@@ -264,7 +282,7 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 	}
 
 	var si, ei, bsi int
-	ctx := &rCtx{}
+	ctx := newCtx(s)
 
 	for i := 0; i < len(s); i++ {
 		if s[i] == bSlash {
