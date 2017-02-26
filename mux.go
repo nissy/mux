@@ -28,8 +28,9 @@ var (
 
 type (
 	Mux struct {
-		tree     []*node
-		NotFound http.HandlerFunc
+		tree          []*node
+		NotFound      http.HandlerFunc
+		maxPramNumber int
 	}
 
 	node struct {
@@ -80,8 +81,8 @@ func (n *node) newChild(child *node, edge string) *node {
 	return child
 }
 
-func newCtx(s string) *rCtx {
-	var n uint
+func (m *Mux) newCtx(s string) *rCtx {
+	var n int
 
 	for i := 0; i < len(s); i++ {
 		if s[i] == bSlash {
@@ -89,8 +90,8 @@ func newCtx(s string) *rCtx {
 		}
 	}
 
-	if n >= 255 {
-		n = 255
+	if m.maxPramNumber < n {
+		n = m.maxPramNumber
 	}
 
 	return &rCtx{
@@ -196,11 +197,11 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 		return
 	}
 
-	var number, si, ei int
+	var number, si, ei, pi int
 
 	for i := 0; i < len(pattern); i++ {
 		if pattern[i] == bSlash {
-			i += 1
+			i++
 		}
 
 		si = i
@@ -241,6 +242,7 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 
 		if len(param) > 0 {
 			child.param = param
+			pi++
 		}
 
 		if i >= len(pattern)-1 {
@@ -255,12 +257,16 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 		if number < len(m.tree)-1 {
 			number = len(m.tree)
 		} else {
-			number += 1
+			number++
 		}
 
 		child.number = number
 		m.tree = append(m.tree, child)
 		parent = parent.newChild(child, edge)
+	}
+
+	if pi > m.maxPramNumber {
+		m.maxPramNumber = pi
 	}
 }
 
@@ -282,11 +288,11 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 	}
 
 	var si, ei, bsi int
-	ctx := newCtx(s)
+	ctx := m.newCtx(s)
 
 	for i := 0; i < len(s); i++ {
 		if s[i] == bSlash {
-			i += 1
+			i++
 		}
 
 		si = i
