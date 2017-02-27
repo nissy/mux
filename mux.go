@@ -3,6 +3,7 @@ package mux
 import (
 	"context"
 	"net/http"
+	"sync"
 )
 
 const (
@@ -29,8 +30,9 @@ var (
 type (
 	Mux struct {
 		tree          []*node
-		NotFound      http.HandlerFunc
+		pool          sync.Pool
 		maxPramNumber int
+		NotFound      http.HandlerFunc
 	}
 
 	node struct {
@@ -61,7 +63,14 @@ func NewMux() *Mux {
 		NotFound: http.NotFound,
 	}
 
+	m.pool = sync.Pool{
+		New: func() interface{} {
+			return newContext(m.maxPramNumber)
+		},
+	}
+
 	m.tree = append(m.tree, newNode(0))
+
 	return m
 }
 
@@ -122,23 +131,6 @@ func isStaticPattern(pattern string) bool {
 	}
 
 	return true
-}
-
-func minDirChoose(path string, pn int) int {
-	var n int
-
-	for i := 0; i < len(path); i++ {
-		if path[i] == bSlash {
-			n++
-			i++
-
-			if n >= pn {
-				return pn
-			}
-		}
-	}
-
-	return n
 }
 
 func (m *Mux) Get(pattern string, handlerFunc http.HandlerFunc) {
@@ -316,7 +308,7 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *Context) {
 		if child = parent.child[edge]; child == nil {
 			if child = parent.child[colon]; child != nil {
 				if ctx == nil {
-					ctx = newContext(minDirChoose(s, m.maxPramNumber))
+					ctx = m.pool.Get().(*Context)
 				}
 				ctx.params.Set(child.param, edge)
 
@@ -324,7 +316,7 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *Context) {
 				//BACKTRACK
 				if child = m.tree[parent.number].child[colon]; child != nil {
 					if ctx == nil {
-						ctx = newContext(minDirChoose(s, m.maxPramNumber))
+						ctx = m.pool.Get().(*Context)
 					}
 					ctx.params.Set(child.param, s[bsi:si-1])
 					si = bsi
@@ -357,6 +349,9 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			fn.ServeHTTP(w, r.WithContext(context.WithValue(
 				r.Context(), ContextKey, ctx),
 			))
+
+			ctx.params = ctx.params[:0]
+			m.pool.Put(ctx)
 			return
 		}
 
