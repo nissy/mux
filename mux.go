@@ -6,16 +6,16 @@ import (
 )
 
 const (
-	GET     = "GET"
-	POST    = "POST"
-	PUT     = "PUT"
-	DELETE  = "DELETE"
-	HEAD    = "HEAD"
-	OPTIONS = "OPTIONS"
-	PATCH   = "PATCH"
-	CONNECT = "CONNECT"
-	TRACE   = "TRACE"
-	rCtxKey = "mux"
+	GET        = "GET"
+	POST       = "POST"
+	PUT        = "PUT"
+	DELETE     = "DELETE"
+	HEAD       = "HEAD"
+	OPTIONS    = "OPTIONS"
+	PATCH      = "PATCH"
+	CONNECT    = "CONNECT"
+	TRACE      = "TRACE"
+	ContextKey = "mux"
 )
 
 var (
@@ -40,7 +40,7 @@ type (
 		param       string
 	}
 
-	rCtx struct {
+	Context struct {
 		params params
 	}
 
@@ -81,21 +81,9 @@ func (n *node) newChild(child *node, edge string) *node {
 	return child
 }
 
-func (m *Mux) newCtx(s string) *rCtx {
-	var n int
-
-	for i := 0; i < len(s); i++ {
-		if s[i] == bSlash {
-			n++
-		}
-	}
-
-	if m.maxPramNumber < n {
-		n = m.maxPramNumber
-	}
-
-	return &rCtx{
-		params: make([]param, 0, n),
+func newContext(cap int) *Context {
+	return &Context{
+		params: make([]param, 0, cap),
 	}
 }
 
@@ -117,8 +105,8 @@ func (ps params) Get(key string) string {
 }
 
 func URLParam(r *http.Request, key string) string {
-	if ctx := r.Context().Value(rCtxKey); ctx != nil {
-		if ctx, ok := ctx.(*rCtx); ok {
+	if ctx := r.Context().Value(ContextKey); ctx != nil {
+		if ctx, ok := ctx.(*Context); ok {
 			return ctx.params.Get(key)
 		}
 	}
@@ -134,6 +122,26 @@ func isStaticPattern(pattern string) bool {
 	}
 
 	return true
+}
+
+func min(a, b int) int {
+	if a <= b {
+		return a
+	}
+
+	return b
+}
+
+func dirCount(s string) int {
+	var n int
+
+	for i := 0; i < len(s); i++ {
+		if s[i] == bSlash {
+			n++
+		}
+	}
+
+	return n
 }
 
 func (m *Mux) Get(pattern string, handlerFunc http.HandlerFunc) {
@@ -270,7 +278,7 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 	}
 }
 
-func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
+func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *Context) {
 	if len(m.tree) < 2 {
 		return nil, nil
 	}
@@ -288,7 +296,7 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *rCtx) {
 	}
 
 	var si, ei, bsi int
-	ctx := m.newCtx(s)
+	ctx := newContext(min(m.maxPramNumber, dirCount(s)))
 
 	for i := 0; i < len(s); i++ {
 		if s[i] == bSlash {
@@ -368,7 +376,7 @@ func (m *Mux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if fn, ctx := m.lookup(r); fn != nil {
 		if ctx != nil {
 			fn.ServeHTTP(w, r.WithContext(context.WithValue(
-				r.Context(), rCtxKey, ctx),
+				r.Context(), ContextKey, ctx),
 			))
 			return
 		}
