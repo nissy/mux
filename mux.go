@@ -124,20 +124,17 @@ func isStaticPattern(pattern string) bool {
 	return true
 }
 
-func min(a, b int) int {
-	if a <= b {
-		return a
-	}
-
-	return b
-}
-
-func dirCount(s string) int {
+func minDirChoose(path string, pn int) int {
 	var n int
 
-	for i := 0; i < len(s); i++ {
-		if s[i] == bSlash {
+	for i := 0; i < len(path); i++ {
+		if path[i] == bSlash {
 			n++
+			i++
+
+			if n >= pn {
+				return pn
+			}
 		}
 	}
 
@@ -296,7 +293,7 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *Context) {
 	}
 
 	var si, ei, bsi int
-	ctx := newContext(min(m.maxPramNumber, dirCount(s)))
+	ctx := newContext(minDirChoose(s, m.maxPramNumber))
 
 	for i := 0; i < len(s); i++ {
 		if s[i] == bSlash {
