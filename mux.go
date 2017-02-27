@@ -338,7 +338,6 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *Context) {
 		if child != nil {
 			if i >= len(s)-1 && child.handlerFunc != nil {
 				return child.handlerFunc, ctx
-
 			}
 
 			bsi = si
