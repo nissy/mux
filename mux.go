@@ -293,7 +293,7 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *Context) {
 	}
 
 	var si, ei, bsi int
-	ctx := newContext(minDirChoose(s, m.maxPramNumber))
+	var ctx *Context
 
 	for i := 0; i < len(s); i++ {
 		if s[i] == bSlash {
@@ -328,6 +328,10 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *Context) {
 
 		//PARAM
 		if child = parent.child[colon]; child != nil {
+			if ctx == nil {
+				ctx = newContext(minDirChoose(s, m.maxPramNumber))
+			}
+
 			ctx.params.Set(child.param, edge)
 		} else {
 			child = parent.child[wildcard]
@@ -347,6 +351,10 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *Context) {
 
 		//BACKTRACK
 		if child = m.tree[parent.number].child[colon]; child != nil {
+			if ctx == nil {
+				ctx = newContext(minDirChoose(s, m.maxPramNumber))
+			}
+
 			ctx.params.Set(child.param, s[bsi:si-1])
 		} else {
 			child = m.tree[parent.number].child[wildcard]
