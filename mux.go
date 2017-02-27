@@ -313,28 +313,26 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *Context) {
 
 		edge := s[si:ei]
 
-		//STATIC
-		if child = parent.child[edge]; child != nil {
-			if i >= len(s)-1 {
-				if child.handlerFunc != nil {
-					return child.handlerFunc, ctx
+		if child = parent.child[edge]; child == nil {
+			if child = parent.child[colon]; child != nil {
+				if ctx == nil {
+					ctx = newContext(minDirChoose(s, m.maxPramNumber))
+				}
+				ctx.params.Set(child.param, edge)
+
+			} else if child = parent.child[wildcard]; child == nil {
+				//BACKTRACK
+				if child = m.tree[parent.number].child[colon]; child != nil {
+					if ctx == nil {
+						ctx = newContext(minDirChoose(s, m.maxPramNumber))
+					}
+					ctx.params.Set(child.param, s[bsi:si-1])
+					si = bsi
+
+				} else if child = m.tree[parent.number].child[wildcard]; child != nil {
+					si = bsi
 				}
 			}
-
-			bsi = si
-			parent = child
-			continue
-		}
-
-		//PARAM
-		if child = parent.child[colon]; child != nil {
-			if ctx == nil {
-				ctx = newContext(minDirChoose(s, m.maxPramNumber))
-			}
-
-			ctx.params.Set(child.param, edge)
-		} else {
-			child = parent.child[wildcard]
 		}
 
 		if child != nil {
@@ -345,28 +343,6 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *Context) {
 			}
 
 			bsi = si
-			parent = child
-			continue
-		}
-
-		//BACKTRACK
-		if child = m.tree[parent.number].child[colon]; child != nil {
-			if ctx == nil {
-				ctx = newContext(minDirChoose(s, m.maxPramNumber))
-			}
-
-			ctx.params.Set(child.param, s[bsi:si-1])
-		} else {
-			child = m.tree[parent.number].child[wildcard]
-		}
-
-		if child != nil {
-			if i >= len(s)-1 {
-				if child.handlerFunc != nil {
-					return child.handlerFunc, ctx
-				}
-			}
-
 			parent = child
 			continue
 		}
