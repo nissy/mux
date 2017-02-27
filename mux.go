@@ -287,9 +287,9 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *Context) {
 		return nil, nil
 	}
 
-	//STATIC PATH
-	if n := parent.child[s]; n != nil {
-		return n.handlerFunc, nil
+	//STATIC
+	if child = parent.child[s]; child != nil {
+		return child.handlerFunc, nil
 	}
 
 	var si, ei, bsi int
@@ -336,10 +336,9 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *Context) {
 		}
 
 		if child != nil {
-			if i >= len(s)-1 {
-				if child.handlerFunc != nil {
-					return child.handlerFunc, ctx
-				}
+			if i >= len(s)-1 && child.handlerFunc != nil {
+				return child.handlerFunc, ctx
+
 			}
 
 			bsi = si
