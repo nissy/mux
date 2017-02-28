@@ -29,17 +29,19 @@ var (
 
 type (
 	Mux struct {
-		tree          []*node
-		pool          sync.Pool
-		maxPramNumber int
-		NotFound      http.HandlerFunc
+		tree     []*node
+		pool     sync.Pool
+		maxParam int
+		NotFound http.HandlerFunc
 	}
 
 	node struct {
-		number      int
-		child       map[string]*node
-		handlerFunc http.HandlerFunc
-		param       string
+		number        int
+		child         map[string]*node
+		childCoron    *node
+		childWildcard *node
+		handlerFunc   http.HandlerFunc
+		param         string
 	}
 
 	Context struct {
@@ -65,12 +67,11 @@ func NewMux() *Mux {
 
 	m.pool = sync.Pool{
 		New: func() interface{} {
-			return newContext(m.maxPramNumber)
+			return newContext(m.maxParam)
 		},
 	}
 
 	m.tree = append(m.tree, newNode(0))
-
 	return m
 }
 
@@ -246,6 +247,14 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 			child.handlerFunc = handlerFunc
 		}
 
+		//SHORTCUT
+		switch edge {
+		case colon:
+			parent.childCoron = child
+		case wildcard:
+			parent.childWildcard = child
+		}
+
 		if _, ok := parent.child[edge]; ok {
 			parent = child
 			continue
@@ -262,8 +271,8 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 		parent = parent.newChild(child, edge)
 	}
 
-	if pi > m.maxPramNumber {
-		m.maxPramNumber = pi
+	if pi > m.maxParam {
+		m.maxParam = pi
 	}
 }
 
@@ -279,7 +288,7 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *Context) {
 		return nil, nil
 	}
 
-	//STATIC
+	//STATIC PATH
 	if child = parent.child[s]; child != nil {
 		return child.handlerFunc, nil
 	}
@@ -306,22 +315,22 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *Context) {
 		edge := s[si:ei]
 
 		if child = parent.child[edge]; child == nil {
-			if child = parent.child[colon]; child != nil {
+			if child = parent.childCoron; child != nil {
 				if ctx == nil {
 					ctx = m.pool.Get().(*Context)
 				}
 				ctx.params.Set(child.param, edge)
 
-			} else if child = parent.child[wildcard]; child == nil {
+			} else if child = parent.childWildcard; child == nil {
 				//BACKTRACK
-				if child = m.tree[parent.number].child[colon]; child != nil {
+				if child = m.tree[parent.number].childCoron; child != nil {
 					if ctx == nil {
 						ctx = m.pool.Get().(*Context)
 					}
 					ctx.params.Set(child.param, s[bsi:si-1])
 					si = bsi
 
-				} else if child = m.tree[parent.number].child[wildcard]; child != nil {
+				} else if child = m.tree[parent.number].childWildcard; child != nil {
 					si = bsi
 				}
 			}
