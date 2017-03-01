@@ -8,11 +8,11 @@ import (
 )
 
 func setup() *httptest.Server {
-	mux := New()
-	mux.Get("/foo", foo)
-	mux.Get("/bar", bar)
-	mux.Get("/baz", baz)
-	return httptest.NewServer(mux)
+	m := NewMux()
+	m.Get("/foo", foo)
+	m.Get("/bar", bar)
+	m.Get("/baz", baz)
+	return httptest.NewServer(m)
 }
 
 func teardown(ts *httptest.Server) {
