@@ -1,4 +1,4 @@
-# Patricia trie mux
+# mux
 Go http request multiplexer
 
 ### Benchmark
