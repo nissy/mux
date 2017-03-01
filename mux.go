@@ -179,11 +179,8 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 
 	var si, ei, pi int
 
-	for i := 0; i < len(pattern); i++ {
-		if pattern[i] == '/' {
-			i++
-		}
-
+	// i = 0 is '/'
+	for i := 1; i < len(pattern); i++ {
 		si = i
 		ei = i
 
@@ -256,11 +253,7 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *Context) {
 	var si, ei, bsi int
 	var ctx *Context
 
-	for i := 0; i < len(s); i++ {
-		if s[i] == '/' {
-			i++
-		}
-
+	for i := 1; i < len(s); i++ {
 		si = i
 		ei = i
 
