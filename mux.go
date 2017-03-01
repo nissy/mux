@@ -29,19 +29,17 @@ var (
 
 type (
 	Mux struct {
-		tree     []*node
+		tree     *node
 		pool     sync.Pool
 		maxParam int
 		NotFound http.HandlerFunc
 	}
 
 	node struct {
-		number        int
-		child         map[string]*node
-		childCoron    *node
-		childWildcard *node
-		handlerFunc   http.HandlerFunc
-		param         string
+		parent      *node
+		child       map[string]*node
+		handlerFunc http.HandlerFunc
+		param       string
 	}
 
 	Context struct {
@@ -71,14 +69,13 @@ func NewMux() *Mux {
 		},
 	}
 
-	m.tree = append(m.tree, newNode(0))
+	m.tree = newNode()
 	return m
 }
 
-func newNode(number int) *node {
+func newNode() *node {
 	return &node{
-		number: number,
-		child:  make(map[string]*node),
+		child: make(map[string]*node),
 	}
 }
 
@@ -87,6 +84,7 @@ func (n *node) newChild(child *node, edge string) *node {
 		n.child = make(map[string]*node)
 	}
 
+	child.parent = n
 	n.child[edge] = child
 	return child
 }
@@ -175,27 +173,23 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 		panic("There is no leading slash")
 	}
 
-	parent := m.tree[0].child[method]
+	parent := m.tree.child[method]
 
 	if parent == nil {
-		parent = m.tree[0]
-		child := newNode(len(m.tree))
-		m.tree = append(m.tree, child)
-		parent = parent.newChild(child, method)
+		parent = m.tree.newChild(newNode(), method)
 	}
 
 	if isStaticPattern(pattern) {
 		if _, ok := parent.child[pattern]; !ok {
-			child := newNode(len(m.tree))
+			child := newNode()
 			child.handlerFunc = handlerFunc
-			m.tree = append(m.tree, child)
 			parent.newChild(child, pattern)
 		}
 
 		return
 	}
 
-	var number, si, ei, pi int
+	var si, ei, pi int
 
 	for i := 0; i < len(pattern); i++ {
 		if pattern[i] == bSlash {
@@ -230,12 +224,10 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 			edge = wildcard
 		}
 
-		child := &node{
-			number: number,
-		}
+		child, exist := parent.child[edge]
 
-		if n := parent.child[edge]; n != nil {
-			child = n
+		if !exist {
+			child = newNode()
 		}
 
 		if len(param) > 0 {
@@ -247,27 +239,11 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 			child.handlerFunc = handlerFunc
 		}
 
-		//SHORTCUT
-		switch edge {
-		case colon:
-			parent.childCoron = child
-		case wildcard:
-			parent.childWildcard = child
-		}
-
-		if _, ok := parent.child[edge]; ok {
+		if exist {
 			parent = child
 			continue
 		}
 
-		if number < len(m.tree)-1 {
-			number = len(m.tree)
-		} else {
-			number++
-		}
-
-		child.number = number
-		m.tree = append(m.tree, child)
 		parent = parent.newChild(child, edge)
 	}
 
@@ -277,14 +253,10 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 }
 
 func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *Context) {
-	if len(m.tree) < 2 {
-		return nil, nil
-	}
-
 	s := r.URL.Path
 	var parent, child *node
 
-	if parent = m.tree[0].child[r.Method]; parent == nil {
+	if parent = m.tree.child[r.Method]; parent == nil {
 		return nil, nil
 	}
 
@@ -315,22 +287,22 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *Context) {
 		edge := s[si:ei]
 
 		if child = parent.child[edge]; child == nil {
-			if child = parent.childCoron; child != nil {
+			if child = parent.child[colon]; child != nil {
 				if ctx == nil {
 					ctx = m.pool.Get().(*Context)
 				}
 				ctx.params.Set(child.param, edge)
 
-			} else if child = parent.childWildcard; child == nil {
+			} else if child = parent.child[wildcard]; child == nil {
 				//BACKTRACK
-				if child = m.tree[parent.number].childCoron; child != nil {
+				if child = parent.parent.child[colon]; child != nil {
 					if ctx == nil {
 						ctx = m.pool.Get().(*Context)
 					}
 					ctx.params.Set(child.param, s[bsi:si-1])
 					si = bsi
 
-				} else if child = m.tree[parent.number].childWildcard; child != nil {
+				} else if child = parent.parent.child[wildcard]; child != nil {
 					si = bsi
 				}
 			}
