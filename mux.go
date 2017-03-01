@@ -19,14 +19,6 @@ const (
 	ContextKey = "mux"
 )
 
-var (
-	colon     = ":"
-	wildcard  = "*"
-	bColon    = byte(':')
-	bSlash    = byte('/')
-	bWildcard = byte('*')
-)
-
 type (
 	Mux struct {
 		tree     *node
@@ -53,10 +45,6 @@ type (
 		value string
 	}
 )
-
-func New() *Mux {
-	return NewMux()
-}
 
 func NewMux() *Mux {
 	m := &Mux{
@@ -124,7 +112,7 @@ func URLParam(r *http.Request, key string) string {
 
 func isStaticPattern(pattern string) bool {
 	for i := 0; i < len(pattern); i++ {
-		if pattern[i] == bColon || pattern[i] == bWildcard {
+		if pattern[i] == ':' || pattern[i] == '*' {
 			return false
 		}
 	}
@@ -169,7 +157,7 @@ func (m *Mux) Trace(pattern string, handlerFunc http.HandlerFunc) {
 }
 
 func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
-	if pattern[0] != bSlash {
+	if pattern[0] != '/' {
 		panic("There is no leading slash")
 	}
 
@@ -192,7 +180,7 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 	var si, ei, pi int
 
 	for i := 0; i < len(pattern); i++ {
-		if pattern[i] == bSlash {
+		if pattern[i] == '/' {
 			i++
 		}
 
@@ -201,12 +189,12 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 
 		for ; i < len(pattern); i++ {
 			if si < ei {
-				if pattern[i] == bColon || pattern[i] == bWildcard {
+				if pattern[i] == ':' || pattern[i] == '*' {
 					panic("Parameter are not first")
 				}
 			}
 
-			if pattern[i] == bSlash {
+			if pattern[i] == '/' {
 				break
 			}
 
@@ -217,11 +205,11 @@ func (m *Mux) Entry(method, pattern string, handlerFunc http.HandlerFunc) {
 		var param string
 
 		switch edge[0] {
-		case bColon:
+		case ':':
 			param = edge[1:]
-			edge = colon
-		case bWildcard:
-			edge = wildcard
+			edge = ":"
+		case '*':
+			edge = "*"
 		}
 
 		child, exist := parent.child[edge]
@@ -269,7 +257,7 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *Context) {
 	var ctx *Context
 
 	for i := 0; i < len(s); i++ {
-		if s[i] == bSlash {
+		if s[i] == '/' {
 			i++
 		}
 
@@ -277,7 +265,7 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *Context) {
 		ei = i
 
 		for ; i < len(s); i++ {
-			if s[i] == bSlash {
+			if s[i] == '/' {
 				break
 			}
 
@@ -287,22 +275,22 @@ func (m *Mux) lookup(r *http.Request) (http.HandlerFunc, *Context) {
 		edge := s[si:ei]
 
 		if child = parent.child[edge]; child == nil {
-			if child = parent.child[colon]; child != nil {
+			if child = parent.child[":"]; child != nil {
 				if ctx == nil {
 					ctx = m.pool.Get().(*Context)
 				}
 				ctx.params.Set(child.param, edge)
 
-			} else if child = parent.child[wildcard]; child == nil {
+			} else if child = parent.child["*"]; child == nil {
 				//BACKTRACK
-				if child = parent.parent.child[colon]; child != nil {
+				if child = parent.parent.child[":"]; child != nil {
 					if ctx == nil {
 						ctx = m.pool.Get().(*Context)
 					}
 					ctx.params.Set(child.param, s[bsi:si-1])
 					si = bsi
 
-				} else if child = parent.parent.child[wildcard]; child != nil {
+				} else if child = parent.parent.child["*"]; child != nil {
 					si = bsi
 				}
 			}
